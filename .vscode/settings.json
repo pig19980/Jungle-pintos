@@ -7,6 +7,5 @@
         "editor.formatOnSave": true
     },
     "clang-format.executable": "/usr/bin/clang-format",
-    "clang-format.style": "file",
-    "clang-format.assumeFilename": "${workspaceFolder}/.vscode/.clang-format"
+    "C_Cpp.clang_format_style": "file",
 }
