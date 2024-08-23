@@ -107,6 +107,8 @@ Temporary Items
 .vscode/*
 !.vscode/tasks.json
 !.vscode/launch.json
+!.vscode/.clang-format
+!.vscode/settings.json
 !.vscode/*.code-snippets
 
 # Local History for Visual Studio Code
