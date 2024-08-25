@@ -7,5 +7,5 @@
         "editor.formatOnSave": true
     },
     "clang-format.executable": "/usr/bin/clang-format",
-    "C_Cpp.clang_format_style": "file",
+    "C_Cpp.clang_format_style": "file:{$workspaceFolder}/.clang-format",
 }
