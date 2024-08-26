@@ -27,6 +27,9 @@ typedef int tid_t;
 #define PRI_DEFAULT 31 /* Default priority. */
 #define PRI_MAX 63	 /* Highest priority. */
 
+/* Max depth of nesting semaphore */
+#define NESTING_DEPTH 8
+
 /* A kernel thread or user process.
  *
  * Each thread structure is stored in its own 4 kB page.  The
@@ -91,6 +94,7 @@ struct thread {
 	char name[16];			   /* Name (for debugging purposes). */
 	int priority;			   /* Priority. */
 	int64_t wake_tick;		   /* Value for check when awake */
+	struct list locking_list;  /* List for locked by this thread */
 
 	/* Shared between thread.c and synch.c. */
 	struct list_elem status_elem; /* Status list element. */
@@ -151,8 +155,9 @@ bool sort_by_tick_ascending(const struct list_elem *, const struct list_elem *,
 void wakeup_thread(int64_t);
 
 // For priority donate
-int _get_priority_recurvie(struct thread *, int);
+int _get_priority_recursive(struct thread *, int);
 bool sort_by_priority_descending(const struct list_elem *,
 								 const struct list_elem *, void *);
+int _get_priority(struct thread *);
 
 #endif /* threads/thread.h */

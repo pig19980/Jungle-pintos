@@ -207,7 +207,7 @@ tid_t thread_create(const char *name, int priority, thread_func *function,
 	/* Add to run queue. */
 	thread_unblock(t);
 
-	if (priority > thread_current()->priority) {
+	if (priority > thread_get_priority()) {
 		thread_yield();
 	}
 
@@ -310,17 +310,16 @@ void thread_set_priority(int new_priority) {
 	thread_current()->priority = new_priority;
 	old_level = intr_disable();
 	if (!list_empty(&ready_list) &&
-		new_priority <
-			list_entry(list_front(&ready_list), struct thread, status_elem)) {
+		thread_get_priority() <
+			_get_priority(list_entry(list_front(&ready_list), struct thread,
+									 status_elem))) {
 		thread_yield();
 	}
 	intr_set_level(old_level);
 }
 
 /* Returns the current thread's priority. */
-int thread_get_priority(void) {
-	return _get_priority_recurvie(thread_current(), 8);
-}
+int thread_get_priority(void) { return _get_priority(thread_current()); }
 
 /* Sets the current thread's nice value to NICE. */
 void thread_set_nice(int nice UNUSED) {
@@ -405,6 +404,7 @@ static void init_thread(struct thread *t, const char *name, int priority) {
 	t->magic = THREAD_MAGIC;
 
 	t->wake_tick = 0;
+	list_init(&t->locking_list);
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
@@ -609,7 +609,6 @@ bool sort_by_tick_ascending(const struct list_elem *a,
 void wakeup_thread(int64_t cur_tick) {
 	struct list_elem *curr_elem;
 	struct thread *curr_thread;
-	enum intr_level old_level;
 
 	ASSERT(intr_context());
 
@@ -624,14 +623,50 @@ void wakeup_thread(int64_t cur_tick) {
 	}
 }
 
-int _get_priority_recurvie(struct thread *thread, int depth) {
-	return thread->priority;
+int _get_priority(struct thread *thread) {
+	enum intr_level old_level;
+	int priority;
+
+	old_level = intr_disable();
+	priority = _get_priority_recursive(thread, NESTING_DEPTH);
+	intr_set_level(old_level);
+	return priority;
+}
+
+int _get_priority_recursive(struct thread *thread, int depth) {
+	int max_priority = thread->priority, temp_priority;
+	struct list *cur_lock_list, *cur_waiter_list;
+	struct list_elem *cur_lock_elem, *cur_waiter_elem;
+	struct lock *cur_lock;
+	struct thread *cur_thread;
+
+	if (depth == 1) {
+		return max_priority;
+	}
+	cur_lock_list = &thread->locking_list;
+	for (cur_lock_elem = list_begin(cur_lock_list);
+		 cur_lock_elem != list_end(cur_lock_list);
+		 cur_lock_elem = list_next(cur_lock_elem)) {
+		cur_lock = list_entry(cur_lock_elem, struct lock, lock_elem);
+		cur_waiter_list = &cur_lock->semaphore.waiters;
+		for (cur_waiter_elem = list_begin(cur_waiter_list);
+			 cur_waiter_elem != list_end(cur_waiter_list);
+			 cur_waiter_elem = list_next(cur_waiter_elem)) {
+			cur_thread =
+				list_entry(cur_waiter_elem, struct thread, status_elem);
+			temp_priority = _get_priority_recursive(cur_thread, depth - 1);
+			if (max_priority < temp_priority) {
+				max_priority = temp_priority;
+			}
+		}
+	}
+
+	return max_priority;
 }
 
 bool sort_by_priority_descending(const struct list_elem *a,
 								 const struct list_elem *b, void *aux UNUSED) {
 	struct thread *threadA = list_entry(a, struct thread, status_elem);
 	struct thread *threadB = list_entry(b, struct thread, status_elem);
-	return _get_priority_recurvie(threadA, 8) >
-		   _get_priority_recurvie(threadB, 8);
+	return _get_priority(threadA) > _get_priority(threadB);
 }

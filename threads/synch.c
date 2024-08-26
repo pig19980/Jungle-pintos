@@ -99,15 +99,25 @@ bool sema_try_down(struct semaphore *sema) {
    This function may be called from an interrupt handler. */
 void sema_up(struct semaphore *sema) {
 	enum intr_level old_level;
+	struct thread *unblocked_thread = NULL;
 
 	ASSERT(sema != NULL);
 
 	old_level = intr_disable();
-	if (!list_empty(&sema->waiters))
-		thread_unblock(list_entry(list_pop_front(&sema->waiters), struct thread,
-								  status_elem));
 	sema->value++;
+	if (!list_empty(&sema->waiters)) {
+		list_sort(&sema->waiters, sort_by_priority_descending, NULL);
+		unblocked_thread = list_entry(list_pop_front(&sema->waiters),
+									  struct thread, status_elem);
+	}
 	intr_set_level(old_level);
+
+	if (unblocked_thread) {
+		thread_unblock(unblocked_thread);
+		if (_get_priority(unblocked_thread) > thread_get_priority()) {
+			thread_yield();
+		}
+	}
 }
 
 static void sema_test_helper(void *sema_);
@@ -178,6 +188,7 @@ void lock_acquire(struct lock *lock) {
 
 	sema_down(&lock->semaphore);
 	lock->holder = thread_current();
+	list_push_back(&lock->holder->locking_list, &lock->lock_elem);
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -209,6 +220,7 @@ void lock_release(struct lock *lock) {
 	ASSERT(lock_held_by_current_thread(lock));
 
 	lock->holder = NULL;
+	list_remove(&lock->lock_elem);
 	sema_up(&lock->semaphore);
 }
 
