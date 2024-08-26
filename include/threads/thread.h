@@ -78,7 +78,7 @@ typedef int tid_t;
  * the `magic' member of the running thread's `struct thread' is
  * set to THREAD_MAGIC.  Stack overflow will normally change this
  * value, triggering the assertion. */
-/* The `elem' member has a dual purpose.  It can be an element in
+/* The `status_elem' member has a dual purpose.  It can be an element in
  * the run queue (thread.c), or it can be an element in a
  * semaphore wait list (synch.c).  It can be used these two ways
  * only because they are mutually exclusive: only a thread in the
@@ -90,9 +90,11 @@ struct thread {
 	enum thread_status status; /* Thread state. */
 	char name[16];			   /* Name (for debugging purposes). */
 	int priority;			   /* Priority. */
+	int64_t wake_tick;		   /* Value for check when awake */
 
 	/* Shared between thread.c and synch.c. */
-	struct list_elem elem; /* List element. */
+	struct list_elem status_elem; /* Status list element. */
+	struct list_elem thread_elem; /* All threads in process list element. */
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
@@ -141,5 +143,16 @@ int thread_get_recent_cpu(void);
 int thread_get_load_avg(void);
 
 void do_iret(struct intr_frame *tf);
+
+// For sleep machanism
+void thread_sleep(int64_t);
+bool sort_by_tick_ascending(const struct list_elem *, const struct list_elem *,
+							void *);
+void wakeup_thread(int64_t);
+
+// For priority donate
+int _get_priority_recurvie(struct thread *, int);
+bool sort_by_priority_descending(const struct list_elem *,
+								 const struct list_elem *, void *);
 
 #endif /* threads/thread.h */
