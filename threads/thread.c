@@ -51,6 +51,8 @@ static long long idle_ticks;   /* # of timer ticks spent idle. */
 static long long kernel_ticks; /* # of timer ticks in kernel threads. */
 static long long user_ticks;   /* # of timer ticks in user programs. */
 
+static myfloat load_avg; /* # of running threads in average */
+
 /* Scheduling. */
 #define TIME_SLICE 4		  /* # of timer ticks to give each thread. */
 static unsigned thread_ticks; /* # of timer ticks since last yield. */
@@ -154,9 +156,14 @@ void thread_tick(void) {
 	else
 		kernel_ticks++;
 
+	thread_current()->recent_cpu = ADDFF(thread_current()->recent_cpu, I2F(1));
+
 	/* Enforce preemption. */
-	if (++thread_ticks >= TIME_SLICE)
+	if (++thread_ticks >= TIME_SLICE) {
+		if (thread_mlfqs) {
+		}
 		intr_yield_on_return();
+	}
 }
 
 /* Prints thread statistics. */
@@ -324,26 +331,17 @@ void thread_set_priority(int new_priority) {
 int thread_get_priority(void) { return _get_priority(thread_current()); }
 
 /* Sets the current thread's nice value to NICE. */
-void thread_set_nice(int nice UNUSED) {
-	/* TODO: Your implementation goes here */
-}
+void thread_set_nice(int nice) { thread_current()->nice = nice; }
 
 /* Returns the current thread's nice value. */
-int thread_get_nice(void) {
-	/* TODO: Your implementation goes here */
-	return 0;
-}
+int thread_get_nice(void) { return thread_current()->nice; }
 
 /* Returns 100 times the system load average. */
-int thread_get_load_avg(void) {
-	/* TODO: Your implementation goes here */
-	return 0;
-}
+int thread_get_load_avg(void) { return F2I(load_avg * 100); }
 
 /* Returns 100 times the current thread's recent_cpu value. */
 int thread_get_recent_cpu(void) {
-	/* TODO: Your implementation goes here */
-	return 0;
+	return F2I(thread_current()->recent_cpu * 100);
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
@@ -405,8 +403,12 @@ static void init_thread(struct thread *t, const char *name, int priority) {
 	t->priority = priority;
 	t->magic = THREAD_MAGIC;
 
-	t->wake_tick = 0;
 	list_init(&t->locking_list);
+	list_push_back(&thread_list, &t->thread_elem);
+
+	if (thread_mlfqs) {
+		t->priority = PRI_MAX;
+	}
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
@@ -527,6 +529,7 @@ static void do_schedule(int status) {
 	ASSERT(thread_current()->status == THREAD_RUNNING);
 	while (!list_empty(&destruction_req)) {
 		struct thread *victim = ptr_thread(list_pop_front(&destruction_req));
+		list_remove(&victim->thread_elem);
 		palloc_free_page(victim);
 	}
 	thread_current()->status = status;
@@ -668,4 +671,59 @@ bool sort_by_priority_descending(const struct list_elem *a,
 	struct thread *threadA = ptr_thread(a);
 	struct thread *threadB = ptr_thread(b);
 	return _get_priority(threadA) > _get_priority(threadB);
+}
+
+// For 4BSD Scheduler
+void calculate_all_priority() {
+	struct list_elem *cur_thread_elem;
+	struct thread *cur_thread;
+	myfloat recent_cpu;
+	int nice, priority;
+
+	for (cur_thread_elem = list_begin(&thread_list);
+		 cur_thread_elem != list_end(&thread_list);
+		 cur_thread_elem = list_next(cur_thread_elem)) {
+		cur_thread = ptr_thread(cur_thread_elem);
+		if (cur_thread == idle_thread) {
+			continue;
+		}
+		recent_cpu = cur_thread->recent_cpu;
+		nice = cur_thread->nice;
+		priority = PRI_MAX - F2I(DIVFN(recent_cpu, 4)) - (nice * 2);
+		if (priority < PRI_MIN) {
+			priority = PRI_MIN;
+		} else if (priority > PRI_MAX) {
+			priority = PRI_MAX;
+		}
+		cur_thread->priority = priority;
+	}
+	list_sort(&ready_list, sort_by_priority_descending, NULL);
+}
+
+void calculate_load_avg_and_recent_cpu() {
+	struct list_elem *cur_thread_elem;
+	struct thread *cur_thread;
+	myfloat recent_cpu;
+	int nice;
+
+	int ready_threads = list_size(&ready_list);
+	if (thread_current() != idle_thread) {
+		ready_threads++;
+	}
+	load_avg = DIVFN((load_avg * 59) + I2F(ready_threads), 60);
+
+	for (cur_thread_elem = list_begin(&thread_list);
+		 cur_thread_elem != list_end(&thread_list);
+		 cur_thread_elem = list_next(cur_thread_elem)) {
+		cur_thread = ptr_thread(cur_thread_elem);
+		if (cur_thread == idle_thread) {
+			continue;
+		}
+		recent_cpu = cur_thread->recent_cpu;
+		nice = cur_thread->nice;
+		recent_cpu =
+			MULFF(DIVFF(2 * load_avg, 2 * load_avg + I2F(1)), recent_cpu) +
+			I2F(nice);
+		cur_thread->recent_cpu = recent_cpu;
+	}
 }

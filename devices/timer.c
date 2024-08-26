@@ -109,6 +109,14 @@ void timer_print_stats(void) {
 static void timer_interrupt(struct intr_frame *args UNUSED) {
 	wakeup_thread(++ticks);
 	thread_tick();
+	if (thread_mlfqs) {
+		if (ticks % TIMER_FREQ == 0) {
+			calculate_load_avg_and_recent_cpu();
+		}
+		if (ticks % 4 == 0) {
+			calculate_all_priority();
+		}
+	}
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer

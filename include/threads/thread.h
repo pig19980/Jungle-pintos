@@ -30,6 +30,23 @@ typedef int tid_t;
 /* Max depth of nesting semaphore */
 #define NESTING_DEPTH 8
 
+/* Macro for 4BSD Scheduler */
+typedef int32_t myfloat;
+#define DEFAULT_NICE 0 /* Default nice. */
+#define FRAC 16
+
+#define I2F(n) ((n) << FRAC)
+#define F2I(f) ((f) >> FRAC)
+
+#define ADDFF(x, y) ((x) + (y))
+#define SUBFF(x, y) ((x) - (y))
+
+#define MULFF(x, y) ((myfloat)((((int64_t)(x)) * (y)) >> FRAC))
+#define DIVFF(x, y) ((myfloat)((((int64_t)(x)) << FRAC) / (y)))
+
+#define MULFN(x, n) ((x) * (n))
+#define DIVFN(x, n) ((x) / (n))
+
 /* A kernel thread or user process.
  *
  * Each thread structure is stored in its own 4 kB page.  The
@@ -100,6 +117,10 @@ struct thread {
 	struct list_elem status_elem; /* Status list element. */
 	struct list_elem thread_elem; /* All threads in process list element. */
 
+	/* Variable for 4BSD Scheduler */
+	int nice;
+	myfloat recent_cpu;
+
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4; /* Page map level 4 */
@@ -159,5 +180,9 @@ int _get_priority_recursive(struct thread *, int);
 bool sort_by_priority_descending(const struct list_elem *,
 								 const struct list_elem *, void *);
 int _get_priority(struct thread *);
+
+// For 4BSD Scheduler
+void calculate_all_priority(void);
+void calculate_load_avg_and_recent_cpu(void);
 
 #endif /* threads/thread.h */
