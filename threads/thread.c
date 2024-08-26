@@ -79,6 +79,9 @@ static tid_t allocate_tid(void);
  * somewhere in the middle, this locates the curent thread. */
 #define running_thread() ((struct thread *)(pg_round_down(rrsp())))
 
+/* Returns thread * containing ptr */
+#define ptr_thread(ptr) ((struct thread *)(pg_round_down(ptr)))
+
 // Global descriptor table for the thread_start.
 // Because the gdt will be setup after the thread_init, we should
 // setup temporal gdt first.
@@ -311,8 +314,7 @@ void thread_set_priority(int new_priority) {
 	old_level = intr_disable();
 	if (!list_empty(&ready_list) &&
 		thread_get_priority() <
-			_get_priority(list_entry(list_front(&ready_list), struct thread,
-									 status_elem))) {
+			_get_priority(ptr_thread(list_front(&ready_list)))) {
 		thread_yield();
 	}
 	intr_set_level(old_level);
@@ -416,8 +418,7 @@ static struct thread *next_thread_to_run(void) {
 	if (list_empty(&ready_list))
 		return idle_thread;
 	else
-		return list_entry(list_pop_front(&ready_list), struct thread,
-						  status_elem);
+		return ptr_thread(list_pop_front(&ready_list));
 }
 
 /* Use iretq to launch the thread */
@@ -525,8 +526,7 @@ static void do_schedule(int status) {
 	ASSERT(intr_get_level() == INTR_OFF);
 	ASSERT(thread_current()->status == THREAD_RUNNING);
 	while (!list_empty(&destruction_req)) {
-		struct thread *victim = list_entry(list_pop_front(&destruction_req),
-										   struct thread, status_elem);
+		struct thread *victim = ptr_thread(list_pop_front(&destruction_req));
 		palloc_free_page(victim);
 	}
 	thread_current()->status = status;
@@ -600,8 +600,8 @@ void thread_sleep(int64_t wake_tick) {
 
 bool sort_by_tick_ascending(const struct list_elem *a,
 							const struct list_elem *b, void *aux UNUSED) {
-	struct thread *threadA = list_entry(a, struct thread, status_elem);
-	struct thread *threadB = list_entry(b, struct thread, status_elem);
+	struct thread *threadA = ptr_thread(a);
+	struct thread *threadB = ptr_thread(b);
 	return threadA->wake_tick < threadB->wake_tick;
 }
 
@@ -614,7 +614,7 @@ void wakeup_thread(int64_t cur_tick) {
 
 	while (!list_empty(&wait_list)) {
 		curr_elem = list_begin(&wait_list);
-		curr_thread = list_entry(curr_elem, struct thread, status_elem);
+		curr_thread = ptr_thread(curr_elem);
 		if (curr_thread->wake_tick > cur_tick) {
 			break;
 		}
@@ -652,8 +652,7 @@ int _get_priority_recursive(struct thread *thread, int depth) {
 		for (cur_waiter_elem = list_begin(cur_waiter_list);
 			 cur_waiter_elem != list_end(cur_waiter_list);
 			 cur_waiter_elem = list_next(cur_waiter_elem)) {
-			cur_thread =
-				list_entry(cur_waiter_elem, struct thread, status_elem);
+			cur_thread = ptr_thread(cur_waiter_elem);
 			temp_priority = _get_priority_recursive(cur_thread, depth - 1);
 			if (max_priority < temp_priority) {
 				max_priority = temp_priority;
@@ -666,7 +665,7 @@ int _get_priority_recursive(struct thread *thread, int depth) {
 
 bool sort_by_priority_descending(const struct list_elem *a,
 								 const struct list_elem *b, void *aux UNUSED) {
-	struct thread *threadA = list_entry(a, struct thread, status_elem);
-	struct thread *threadB = list_entry(b, struct thread, status_elem);
+	struct thread *threadA = ptr_thread(a);
+	struct thread *threadB = ptr_thread(b);
 	return _get_priority(threadA) > _get_priority(threadB);
 }
