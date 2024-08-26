@@ -81,7 +81,11 @@ static tid_t allocate_tid(void);
  * somewhere in the middle, this locates the curent thread. */
 #define running_thread() ((struct thread *)(pg_round_down(rrsp())))
 
-/* Returns thread * containing ptr */
+/* Returns (thread *) containing ptr
+ * Since rsp struct thread and stack in the same page.
+ * So if ptr is member of struct thread or local variable of call stack,
+ * pg_round_down return pointer of (thread *)
+ */
 #define ptr_thread(ptr) ((struct thread *)(pg_round_down(ptr)))
 
 // Global descriptor table for the thread_start.
@@ -160,8 +164,6 @@ void thread_tick(void) {
 
 	/* Enforce preemption. */
 	if (++thread_ticks >= TIME_SLICE) {
-		if (thread_mlfqs) {
-		}
 		intr_yield_on_return();
 	}
 }
@@ -601,6 +603,7 @@ void thread_sleep(int64_t wake_tick) {
 	intr_set_level(old_level);
 }
 
+/* Helper function to sort least remained ticks first */
 bool sort_by_tick_ascending(const struct list_elem *a,
 							const struct list_elem *b, void *aux UNUSED) {
 	struct thread *threadA = ptr_thread(a);
@@ -626,6 +629,7 @@ void wakeup_thread(int64_t cur_tick) {
 	}
 }
 
+/* Return real priority considering priority donate */
 int _get_priority(struct thread *thread) {
 	enum intr_level old_level;
 	int priority;
@@ -636,6 +640,7 @@ int _get_priority(struct thread *thread) {
 	return priority;
 }
 
+/* Helper function for calculate priority */
 int _get_priority_recursive(struct thread *thread, int depth) {
 	int max_priority = thread->priority, temp_priority;
 	struct list *cur_lock_list, *cur_waiter_list;
@@ -666,6 +671,7 @@ int _get_priority_recursive(struct thread *thread, int depth) {
 	return max_priority;
 }
 
+/* Helper function to sort greatest priority first */
 bool sort_by_priority_descending(const struct list_elem *a,
 								 const struct list_elem *b, void *aux UNUSED) {
 	struct thread *threadA = ptr_thread(a);
@@ -674,6 +680,7 @@ bool sort_by_priority_descending(const struct list_elem *a,
 }
 
 // For 4BSD Scheduler
+/* Recalculate prioriry of all thread every 4 ticks */
 void calculate_all_priority() {
 	struct list_elem *cur_thread_elem;
 	struct thread *cur_thread;
@@ -700,6 +707,7 @@ void calculate_all_priority() {
 	list_sort(&ready_list, sort_by_priority_descending, NULL);
 }
 
+/* Recalculate load_avg and recent_cpu of all thread every 1 second */
 void calculate_load_avg_and_recent_cpu() {
 	struct list_elem *cur_thread_elem;
 	struct thread *cur_thread;
