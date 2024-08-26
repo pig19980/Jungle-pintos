@@ -100,15 +100,18 @@ bool sema_try_down(struct semaphore *sema) {
 void sema_up(struct semaphore *sema) {
 	enum intr_level old_level;
 	struct thread *unblocked_thread = NULL;
+	struct list_elem *unblocked_elem;
 
 	ASSERT(sema != NULL);
 
 	old_level = intr_disable();
 	sema->value++;
 	if (!list_empty(&sema->waiters)) {
-		list_sort(&sema->waiters, sort_by_priority_descending, NULL);
-		unblocked_thread = list_entry(list_pop_front(&sema->waiters),
-									  struct thread, status_elem);
+		unblocked_elem =
+			list_min(&sema->waiters, sort_by_priority_descending, NULL);
+		list_remove(unblocked_elem);
+		unblocked_thread =
+			list_entry(unblocked_elem, struct thread, status_elem);
 	}
 	intr_set_level(old_level);
 
@@ -296,10 +299,13 @@ void cond_signal(struct condition *cond, struct lock *lock UNUSED) {
 	ASSERT(!intr_context());
 	ASSERT(lock_held_by_current_thread(lock));
 
+	struct list_elem *unblocked_elem;
+
 	if (!list_empty(&cond->waiters)) {
-		list_sort(&cond->waiters, sort_by_priority_descending, NULL);
-		sema_up(&list_entry(list_pop_front(&cond->waiters),
-							struct semaphore_elem, elem)
+		unblocked_elem =
+			list_min(&cond->waiters, sort_by_priority_descending, NULL);
+		list_remove(unblocked_elem);
+		sema_up(&list_entry(unblocked_elem, struct semaphore_elem, elem)
 					 ->semaphore);
 	}
 }
