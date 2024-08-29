@@ -636,9 +636,7 @@ void thread_wakeup(int64_t cur_tick) {
 }
 
 /* Return real priority considering priority donate.
-   Check all locks such that given thread is holding.
-   Get maximum priority between donate_priority of locks
-   and origin priority of thread */
+   If -mlfqs flag is on, return original priority */
 int thread_priority_of(struct thread *thread) {
 	if (thread_mlfqs) {
 		return thread->priority;
@@ -657,7 +655,7 @@ bool sort_by_priority_descending(const struct list_elem *a,
 
 /* Donate priority to holder.
    Use this function to update donate_priority of lock
-   when waiter is locked thread.
+   and real_priority of holder.
    Called by lock_acquire in threads/synch.c */
 void thread_donate_priority_to_holder(struct thread *waiter) {
 	struct thread *holder;
@@ -702,6 +700,9 @@ int thread_max_priority_in_waiters(struct list *waiters) {
 	return max_priority;
 }
 
+/* Get max priority in locks of locking_list of current thread.
+   And update read_priority of current thread with this value.
+   Called by lock_release in threads/synch.c */
 void thread_reset_real_priority(void) {
 	enum intr_level old_level;
 	struct list_elem *cur_lock_elem;
