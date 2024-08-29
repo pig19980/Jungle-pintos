@@ -632,43 +632,22 @@ void wakeup_thread(int64_t cur_tick) {
 /* Return real priority considering priority donate */
 int _get_priority(struct thread *thread) {
 	enum intr_level old_level;
+	struct list_elem *cur_lock_elem;
+	struct lock *cur_lock;
 	int priority;
 
+	priority = thread->priority;
 	old_level = intr_disable();
-	priority = _get_priority_recursive(thread, NESTING_DEPTH);
-	intr_set_level(old_level);
-	return priority;
-}
-
-/* Helper function for calculate priority */
-int _get_priority_recursive(struct thread *thread, int depth) {
-	int max_priority = thread->priority, temp_priority;
-	struct list *cur_lock_list, *cur_waiter_list;
-	struct list_elem *cur_lock_elem, *cur_waiter_elem;
-	struct lock *cur_lock;
-	struct thread *cur_thread;
-
-	if (depth == 1) {
-		return max_priority;
-	}
-	cur_lock_list = &thread->locking_list;
-	for (cur_lock_elem = list_begin(cur_lock_list);
-		 cur_lock_elem != list_end(cur_lock_list);
+	for (cur_lock_elem = list_begin(&thread->locking_list);
+		 cur_lock_elem != list_end(&thread->locking_list);
 		 cur_lock_elem = list_next(cur_lock_elem)) {
 		cur_lock = list_entry(cur_lock_elem, struct lock, lock_elem);
-		cur_waiter_list = &cur_lock->semaphore.waiters;
-		for (cur_waiter_elem = list_begin(cur_waiter_list);
-			 cur_waiter_elem != list_end(cur_waiter_list);
-			 cur_waiter_elem = list_next(cur_waiter_elem)) {
-			cur_thread = ptr_thread(cur_waiter_elem);
-			temp_priority = _get_priority_recursive(cur_thread, depth - 1);
-			if (max_priority < temp_priority) {
-				max_priority = temp_priority;
-			}
+		if (priority < cur_lock->donate_priority) {
+			priority = cur_lock->donate_priority;
 		}
 	}
-
-	return max_priority;
+	intr_set_level(old_level);
+	return priority;
 }
 
 /* Helper function to sort greatest priority first */
@@ -677,6 +656,40 @@ bool sort_by_priority_descending(const struct list_elem *a,
 	struct thread *threadA = ptr_thread(a);
 	struct thread *threadB = ptr_thread(b);
 	return _get_priority(threadA) > _get_priority(threadB);
+}
+
+/* Donate priority to holder */
+void donate_priority_to_holder(struct thread *waiter) {
+	struct thread *holder;
+	for (;;) {
+		holder = waiter->waiting_lock->holder;
+		if (holder->waiting_lock && holder->waiting_lock->donate_priority <
+										waiter->waiting_lock->donate_priority) {
+			holder->waiting_lock->donate_priority =
+				waiter->waiting_lock->donate_priority;
+			waiter = holder;
+		} else {
+			break;
+		}
+	}
+	list_sort(&ready_list, sort_by_priority_descending, NULL);
+}
+
+int get_max_priority_in_waiters(struct list *waiters) {
+	int max_priority, cur_priority;
+	struct thread *cur_thread;
+	struct list_elem *cur_waiter_elem;
+	max_priority = 0;
+	for (cur_waiter_elem = list_begin(waiters);
+		 cur_waiter_elem != list_end(waiters);
+		 cur_waiter_elem = list_next(cur_waiter_elem)) {
+		cur_thread = ptr_thread(cur_waiter_elem);
+		cur_priority = _get_priority(cur_thread);
+		if (max_priority < cur_priority) {
+			max_priority = cur_priority;
+		}
+	}
+	return max_priority;
 }
 
 // For 4BSD Scheduler

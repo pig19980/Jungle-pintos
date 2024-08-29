@@ -111,6 +111,7 @@ struct thread {
 	char name[16];			   /* Name (for debugging purposes). */
 	int priority;			   /* Priority. */
 	int64_t wake_tick;		   /* Value for check when awake */
+	struct lock *waiting_lock; /* Value for check whick lock waiting*/
 	struct list locking_list;  /* List for locked by this thread */
 
 	/* Shared between thread.c and synch.c. */
@@ -176,10 +177,11 @@ bool sort_by_tick_ascending(const struct list_elem *, const struct list_elem *,
 void wakeup_thread(int64_t);
 
 // For priority donate
-int _get_priority_recursive(struct thread *, int);
 bool sort_by_priority_descending(const struct list_elem *,
 								 const struct list_elem *, void *);
 int _get_priority(struct thread *);
+void donate_priority_to_holder(struct thread *);
+int get_max_priority_in_waiters(struct list *);
 
 // For 4BSD Scheduler
 void calculate_all_priority(void);

@@ -173,6 +173,7 @@ void lock_init(struct lock *lock) {
 	ASSERT(lock != NULL);
 
 	lock->holder = NULL;
+	lock->donate_priority = 0;
 	sema_init(&lock->semaphore, 1);
 }
 
@@ -185,13 +186,31 @@ void lock_init(struct lock *lock) {
    interrupts disabled, but interrupts will be turned back on if
    we need to sleep. */
 void lock_acquire(struct lock *lock) {
+	enum intr_level old_level;
+	int cur_priority;
+	struct thread *cur_thread;
+
 	ASSERT(lock != NULL);
 	ASSERT(!intr_context());
 	ASSERT(!lock_held_by_current_thread(lock));
 
-	sema_down(&lock->semaphore);
-	lock->holder = thread_current();
-	list_push_back(&lock->holder->locking_list, &lock->lock_elem);
+	cur_thread = thread_current();
+	old_level = intr_disable();
+	if (!sema_try_down(&lock->semaphore)) {
+		cur_priority = thread_get_priority();
+		cur_thread->waiting_lock = lock;
+		if (lock->donate_priority < cur_priority) {
+			lock->donate_priority = cur_priority;
+			donate_priority_to_holder(cur_thread);
+		}
+		sema_down(&lock->semaphore);
+		lock->donate_priority =
+			get_max_priority_in_waiters(&lock->semaphore.waiters);
+		cur_thread->waiting_lock = NULL;
+	}
+	intr_set_level(old_level);
+	lock->holder = cur_thread;
+	list_push_back(&cur_thread->locking_list, &lock->lock_elem);
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -207,8 +226,10 @@ bool lock_try_acquire(struct lock *lock) {
 	ASSERT(!lock_held_by_current_thread(lock));
 
 	success = sema_try_down(&lock->semaphore);
-	if (success)
+	if (success) {
 		lock->holder = thread_current();
+		list_push_back(&lock->holder->locking_list, &lock->lock_elem);
+	}
 	return success;
 }
 
