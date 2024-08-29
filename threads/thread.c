@@ -322,6 +322,7 @@ void thread_set_priority(int new_priority) {
 	enum intr_level old_level;
 
 	thread_current()->priority = new_priority;
+	thread_reset_real_priority();
 	old_level = intr_disable();
 	if (!list_empty(&ready_list) &&
 		thread_get_priority() <
@@ -405,6 +406,7 @@ static void init_thread(struct thread *t, const char *name, int priority) {
 	strlcpy(t->name, name, sizeof t->name);
 	t->tf.rsp = (uint64_t)t + PGSIZE - sizeof(void *);
 	t->priority = priority;
+	t->real_priority = priority;
 	t->magic = THREAD_MAGIC;
 
 	list_init(&t->locking_list);
@@ -637,25 +639,7 @@ void thread_wakeup(int64_t cur_tick) {
    Check all locks such that given thread is holding.
    Get maximum priority between donate_priority of locks
    and origin priority of thread */
-int thread_priority_of(struct thread *thread) {
-	enum intr_level old_level;
-	struct list_elem *cur_lock_elem;
-	struct lock *cur_lock;
-	int priority;
-
-	priority = thread->priority;
-	old_level = intr_disable();
-	for (cur_lock_elem = list_begin(&thread->locking_list);
-		 cur_lock_elem != list_end(&thread->locking_list);
-		 cur_lock_elem = list_next(cur_lock_elem)) {
-		cur_lock = list_entry(cur_lock_elem, struct lock, lock_elem);
-		if (priority < cur_lock->donate_priority) {
-			priority = cur_lock->donate_priority;
-		}
-	}
-	intr_set_level(old_level);
-	return priority;
-}
+int thread_priority_of(struct thread *thread) { return thread->real_priority; }
 
 /* Helper function to sort greatest priority first */
 bool sort_by_priority_descending(const struct list_elem *a,
@@ -669,18 +653,24 @@ bool sort_by_priority_descending(const struct list_elem *a,
    Use this function to update donate_priority of lock
    when waiter is locked thread.
    Called by lock_acquire in threads/synch.c */
-void donate_priority_to_holder(struct thread *waiter) {
+void thread_donate_priority_to_holder(struct thread *waiter) {
 	struct thread *holder;
+	struct lock *waiter_waiting_lock, *holder_waiting_lock;
 	for (;;) {
-		holder = waiter->waiting_lock->holder;
-		if (holder->waiting_lock && holder->waiting_lock->donate_priority <
-										waiter->waiting_lock->donate_priority) {
-			holder->waiting_lock->donate_priority =
-				waiter->waiting_lock->donate_priority;
-			waiter = holder;
-		} else {
+		waiter_waiting_lock = waiter->waiting_lock;
+		if (!waiter_waiting_lock ||
+			waiter_waiting_lock->donate_priority >= waiter->real_priority) {
 			break;
 		}
+		waiter_waiting_lock->donate_priority = waiter->real_priority;
+
+		holder = waiter_waiting_lock->holder;
+		if (!holder ||
+			holder->real_priority >= waiter_waiting_lock->donate_priority) {
+			break;
+		}
+		holder->real_priority = waiter_waiting_lock->donate_priority;
+		waiter = holder;
 	}
 	list_sort(&ready_list, sort_by_priority_descending, NULL);
 }
@@ -689,7 +679,7 @@ void donate_priority_to_holder(struct thread *waiter) {
    Use this function to update donate_priority of lock
    when current thread become holder of lock.
    Called by lock_acquire in threads/synch.c */
-int get_max_priority_in_waiters(struct list *waiters) {
+int thread_max_priority_in_waiters(struct list *waiters) {
 	int max_priority, cur_priority;
 	struct thread *cur_thread;
 	struct list_elem *cur_waiter_elem;
@@ -704,6 +694,28 @@ int get_max_priority_in_waiters(struct list *waiters) {
 		}
 	}
 	return max_priority;
+}
+
+int thread_reset_real_priority(void) {
+	enum intr_level old_level;
+	struct list_elem *cur_lock_elem;
+	struct lock *cur_lock;
+	struct thread *cur_thread;
+	int real_priority;
+
+	cur_thread = thread_current();
+	real_priority = cur_thread->priority;
+	old_level = intr_disable();
+	for (cur_lock_elem = list_begin(&cur_thread->locking_list);
+		 cur_lock_elem != list_end(&cur_thread->locking_list);
+		 cur_lock_elem = list_next(cur_lock_elem)) {
+		cur_lock = list_entry(cur_lock_elem, struct lock, lock_elem);
+		if (real_priority < cur_lock->donate_priority) {
+			real_priority = cur_lock->donate_priority;
+		}
+	}
+	cur_thread->real_priority = real_priority;
+	intr_set_level(old_level);
 }
 
 // For 4BSD Scheduler

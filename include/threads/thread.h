@@ -110,6 +110,7 @@ struct thread {
 	enum thread_status status; /* Thread state. */
 	char name[16];			   /* Name (for debugging purposes). */
 	int priority;			   /* Original priority. */
+	int real_priority;		   /* Real priority */
 	int64_t wake_tick;		   /* Value for check when this thread awake. */
 	/* Value for check whick lock waiting.
 	 * Use this Value to donate recursive. */
@@ -187,8 +188,9 @@ void thread_wakeup(int64_t);
 bool sort_by_priority_descending(const struct list_elem *,
 								 const struct list_elem *, void *);
 int thread_priority_of(struct thread *);
-void donate_priority_to_holder(struct thread *);
-int get_max_priority_in_waiters(struct list *);
+void thread_donate_priority_to_holder(struct thread *);
+int thread_max_priority_in_waiters(struct list *);
+int thread_reset_real_priority(void);
 
 // For 4BSD Scheduler
 void calculate_all_priority(void);

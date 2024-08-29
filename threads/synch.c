@@ -198,19 +198,18 @@ void lock_acquire(struct lock *lock) {
 	old_level = intr_disable();
 	/* Try sema down if there is no waiter */
 	if (!sema_try_down(&lock->semaphore)) {
-		cur_priority = thread_get_priority();
+		cur_priority = thread_priority_of(cur_thread);
 		cur_thread->waiting_lock = lock;
 		/* If new waiter of given lock(current thread) have high priority,
 		 * start priority donate. */
 		if (lock->donate_priority < cur_priority) {
-			lock->donate_priority = cur_priority;
-			donate_priority_to_holder(cur_thread);
+			thread_donate_priority_to_holder(cur_thread);
 		}
 		sema_down(&lock->semaphore);
 		/* If current thread become owner of lock,
 		 * recalculate proirity of this lock. */
 		lock->donate_priority =
-			get_max_priority_in_waiters(&lock->semaphore.waiters);
+			thread_max_priority_in_waiters(&lock->semaphore.waiters);
 		cur_thread->waiting_lock = NULL;
 	}
 	intr_set_level(old_level);
@@ -250,6 +249,7 @@ void lock_release(struct lock *lock) {
 
 	lock->holder = NULL;
 	list_remove(&lock->lock_elem);
+	thread_reset_real_priority();
 	sema_up(&lock->semaphore);
 }
 
