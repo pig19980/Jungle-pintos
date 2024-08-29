@@ -639,7 +639,13 @@ void thread_wakeup(int64_t cur_tick) {
    Check all locks such that given thread is holding.
    Get maximum priority between donate_priority of locks
    and origin priority of thread */
-int thread_priority_of(struct thread *thread) { return thread->real_priority; }
+int thread_priority_of(struct thread *thread) {
+	if (thread_mlfqs) {
+		return thread->priority;
+	} else {
+		return thread->real_priority;
+	}
+}
 
 /* Helper function to sort greatest priority first */
 bool sort_by_priority_descending(const struct list_elem *a,
@@ -655,7 +661,7 @@ bool sort_by_priority_descending(const struct list_elem *a,
    Called by lock_acquire in threads/synch.c */
 void thread_donate_priority_to_holder(struct thread *waiter) {
 	struct thread *holder;
-	struct lock *waiter_waiting_lock, *holder_waiting_lock;
+	struct lock *waiter_waiting_lock;
 	for (;;) {
 		waiter_waiting_lock = waiter->waiting_lock;
 		if (!waiter_waiting_lock ||
@@ -696,7 +702,7 @@ int thread_max_priority_in_waiters(struct list *waiters) {
 	return max_priority;
 }
 
-int thread_reset_real_priority(void) {
+void thread_reset_real_priority(void) {
 	enum intr_level old_level;
 	struct list_elem *cur_lock_elem;
 	struct lock *cur_lock;

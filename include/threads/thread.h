@@ -190,7 +190,7 @@ bool sort_by_priority_descending(const struct list_elem *,
 int thread_priority_of(struct thread *);
 void thread_donate_priority_to_holder(struct thread *);
 int thread_max_priority_in_waiters(struct list *);
-int thread_reset_real_priority(void);
+void thread_reset_real_priority(void);
 
 // For 4BSD Scheduler
 void calculate_all_priority(void);
