@@ -727,7 +727,7 @@ void thread_reset_real_priority(void) {
 // For 4BSD Scheduler
 /* Recalculate prioriry of all thread every 4 ticks.
    Called by timer_interrupt in timer.c */
-void calculate_all_priority() {
+void mlfqs_calculate_all_priority() {
 	struct list_elem *cur_thread_elem;
 	struct thread *cur_thread;
 	myfloat recent_cpu;
@@ -755,7 +755,7 @@ void calculate_all_priority() {
 
 /* Recalculate load_avg and recent_cpu of all thread every 1 second.
    Called by timer_interrupt in timer.c */
-void calculate_load_avg_and_recent_cpu() {
+void mlfqs_calculate_load_avg_and_recent_cpu() {
 	struct list_elem *cur_thread_elem;
 	struct thread *cur_thread;
 	myfloat recent_cpu;

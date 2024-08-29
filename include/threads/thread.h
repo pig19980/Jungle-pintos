@@ -193,7 +193,7 @@ int thread_max_priority_in_waiters(struct list *);
 void thread_reset_real_priority(void);
 
 // For 4BSD Scheduler
-void calculate_all_priority(void);
-void calculate_load_avg_and_recent_cpu(void);
+void mlfqs_calculate_all_priority(void);
+void mlfqs_calculate_load_avg_and_recent_cpu(void);
 
 #endif /* threads/thread.h */

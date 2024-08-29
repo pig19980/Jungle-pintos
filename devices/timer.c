@@ -111,10 +111,10 @@ static void timer_interrupt(struct intr_frame *args UNUSED) {
 	thread_tick();
 	if (thread_mlfqs) {
 		if (ticks % TIMER_FREQ == 0) {
-			calculate_load_avg_and_recent_cpu();
+			mlfqs_calculate_load_avg_and_recent_cpu();
 		}
 		if (ticks % 4 == 0) {
-			calculate_all_priority();
+			mlfqs_calculate_all_priority();
 		}
 	}
 }
