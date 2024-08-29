@@ -31,7 +31,7 @@ static struct list ready_list;
 /* List of processes in time_sleep. */
 static struct list wait_list;
 
-/* List of all threads in process */
+/* List of all threads in process. */
 static struct list thread_list;
 
 /* Idle thread. */
@@ -43,7 +43,7 @@ static struct thread *initial_thread;
 /* Lock used by allocate_tid(). */
 static struct lock tid_lock;
 
-/* Thread destruction requests */
+/* Thread destruction requests. */
 static struct list destruction_req;
 
 /* Statistics. */
@@ -51,7 +51,8 @@ static long long idle_ticks;   /* # of timer ticks spent idle. */
 static long long kernel_ticks; /* # of timer ticks in kernel threads. */
 static long long user_ticks;   /* # of timer ticks in user programs. */
 
-static myfloat load_avg; /* # of running threads in average */
+/* Value for 4BSD Scheduler. */
+static myfloat load_avg; /* # of running threads in average. */
 
 /* Scheduling. */
 #define TIME_SLICE 4		  /* # of timer ticks to give each thread. */
@@ -81,11 +82,12 @@ static tid_t allocate_tid(void);
  * somewhere in the middle, this locates the curent thread. */
 #define running_thread() ((struct thread *)(pg_round_down(rrsp())))
 
-/* Returns (thread *) containing ptr
- * Since rsp struct thread and stack in the same page.
- * So if ptr is member of struct thread or local variable of call stack,
- * pg_round_down return pointer of (thread *)
- */
+/* Returns (thread *) containing ptr.
+ * (rsp, member of struct thread, local value in stack) are in the same page.
+ * So if ptr is member of struct thread or local value of call stack,
+ * ptr_thread return pointer of struct thread by using pg_round_down.
+ * Given ptr can be list_elem in struct thread,
+ * and local value waiter in cond_wait. */
 #define ptr_thread(ptr) ((struct thread *)(pg_round_down(ptr)))
 
 // Global descriptor table for the thread_start.
@@ -323,14 +325,14 @@ void thread_set_priority(int new_priority) {
 	old_level = intr_disable();
 	if (!list_empty(&ready_list) &&
 		thread_get_priority() <
-			_get_priority(ptr_thread(list_front(&ready_list)))) {
+			thread_priority_of(ptr_thread(list_front(&ready_list)))) {
 		thread_yield();
 	}
 	intr_set_level(old_level);
 }
 
 /* Returns the current thread's priority. */
-int thread_get_priority(void) { return _get_priority(thread_current()); }
+int thread_get_priority(void) { return thread_priority_of(thread_current()); }
 
 /* Sets the current thread's nice value to NICE. */
 void thread_set_nice(int nice) { thread_current()->nice = nice; }
@@ -425,7 +427,7 @@ static struct thread *next_thread_to_run(void) {
 		return ptr_thread(list_pop_front(&ready_list));
 }
 
-/* Use iretq to launch the thread */
+/* Use iretq to launch the thread. */
 void do_iret(struct intr_frame *tf) {
 	__asm __volatile("movq %0, %%rsp\n"
 					 "movq 0(%%rsp),%%r15\n"
@@ -611,8 +613,10 @@ bool sort_by_tick_ascending(const struct list_elem *a,
 	return threadA->wake_tick < threadB->wake_tick;
 }
 
-/* Check wait_list and add in ready_list */
-void wakeup_thread(int64_t cur_tick) {
+/* Check wait_list.
+   Remove from wait_list and add in ready_list,
+   if thread should wakeup */
+void thread_wakeup(int64_t cur_tick) {
 	struct list_elem *curr_elem;
 	struct thread *curr_thread;
 
@@ -629,8 +633,11 @@ void wakeup_thread(int64_t cur_tick) {
 	}
 }
 
-/* Return real priority considering priority donate */
-int _get_priority(struct thread *thread) {
+/* Return real priority considering priority donate.
+   Check all locks such that given thread is holding.
+   Get maximum priority between donate_priority of locks
+   and origin priority of thread */
+int thread_priority_of(struct thread *thread) {
 	enum intr_level old_level;
 	struct list_elem *cur_lock_elem;
 	struct lock *cur_lock;
@@ -655,10 +662,13 @@ bool sort_by_priority_descending(const struct list_elem *a,
 								 const struct list_elem *b, void *aux UNUSED) {
 	struct thread *threadA = ptr_thread(a);
 	struct thread *threadB = ptr_thread(b);
-	return _get_priority(threadA) > _get_priority(threadB);
+	return thread_priority_of(threadA) > thread_priority_of(threadB);
 }
 
-/* Donate priority to holder */
+/* Donate priority to holder.
+   Use this function to update donate_priority of lock
+   when waiter is locked thread.
+   Called by lock_acquire in threads/synch.c */
 void donate_priority_to_holder(struct thread *waiter) {
 	struct thread *holder;
 	for (;;) {
@@ -675,6 +685,10 @@ void donate_priority_to_holder(struct thread *waiter) {
 	list_sort(&ready_list, sort_by_priority_descending, NULL);
 }
 
+/* Get max priority in waiters of lock.
+   Use this function to update donate_priority of lock
+   when current thread become holder of lock.
+   Called by lock_acquire in threads/synch.c */
 int get_max_priority_in_waiters(struct list *waiters) {
 	int max_priority, cur_priority;
 	struct thread *cur_thread;
@@ -684,7 +698,7 @@ int get_max_priority_in_waiters(struct list *waiters) {
 		 cur_waiter_elem != list_end(waiters);
 		 cur_waiter_elem = list_next(cur_waiter_elem)) {
 		cur_thread = ptr_thread(cur_waiter_elem);
-		cur_priority = _get_priority(cur_thread);
+		cur_priority = thread_priority_of(cur_thread);
 		if (max_priority < cur_priority) {
 			max_priority = cur_priority;
 		}
@@ -693,7 +707,8 @@ int get_max_priority_in_waiters(struct list *waiters) {
 }
 
 // For 4BSD Scheduler
-/* Recalculate prioriry of all thread every 4 ticks */
+/* Recalculate prioriry of all thread every 4 ticks.
+   Called by timer_interrupt in timer.c */
 void calculate_all_priority() {
 	struct list_elem *cur_thread_elem;
 	struct thread *cur_thread;
@@ -720,7 +735,8 @@ void calculate_all_priority() {
 	list_sort(&ready_list, sort_by_priority_descending, NULL);
 }
 
-/* Recalculate load_avg and recent_cpu of all thread every 1 second */
+/* Recalculate load_avg and recent_cpu of all thread every 1 second.
+   Called by timer_interrupt in timer.c */
 void calculate_load_avg_and_recent_cpu() {
 	struct list_elem *cur_thread_elem;
 	struct thread *cur_thread;

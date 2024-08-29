@@ -109,17 +109,24 @@ struct thread {
 	tid_t tid;				   /* Thread identifier. */
 	enum thread_status status; /* Thread state. */
 	char name[16];			   /* Name (for debugging purposes). */
-	int priority;			   /* Priority. */
-	int64_t wake_tick;		   /* Value for check when awake */
-	struct lock *waiting_lock; /* Value for check whick lock waiting*/
-	struct list locking_list;  /* List for locked by this thread */
+	int priority;			   /* Original priority. */
+	int64_t wake_tick;		   /* Value for check when this thread awake. */
+	/* Value for check whick lock waiting.
+	 * Use this Value to donate recursive. */
+	struct lock *waiting_lock;
+	/* List for locked by this thread.
+	 * Use this list to calculate real priority. */
+	struct list locking_list;
 
 	/* Shared between thread.c and synch.c. */
 	struct list_elem status_elem; /* Status list element. */
 	struct list_elem thread_elem; /* All threads in process list element. */
 
-	/* Variable for 4BSD Scheduler */
+	/* Value for 4BSD Scheduler.
+	 * Thread nice value. Default is 0 and can changed by thread_get_nice. */
 	int nice;
+	/* Value for 4BSD Scheduler.
+	 * It become bigger when this thread use cpu much recently. */
 	myfloat recent_cpu;
 
 #ifdef USERPROG
@@ -132,7 +139,7 @@ struct thread {
 #endif
 
 	/* Owned by thread.c. */
-	struct intr_frame tf; /* Information for switching */
+	struct intr_frame tf; /* Information for switching. */
 	unsigned magic;		  /* Detects stack overflow. */
 };
 
@@ -174,12 +181,12 @@ void do_iret(struct intr_frame *tf);
 void thread_sleep(int64_t);
 bool sort_by_tick_ascending(const struct list_elem *, const struct list_elem *,
 							void *);
-void wakeup_thread(int64_t);
+void thread_wakeup(int64_t);
 
 // For priority donate
 bool sort_by_priority_descending(const struct list_elem *,
 								 const struct list_elem *, void *);
-int _get_priority(struct thread *);
+int thread_priority_of(struct thread *);
 void donate_priority_to_holder(struct thread *);
 int get_max_priority_in_waiters(struct list *);
 
