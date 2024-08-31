@@ -694,6 +694,9 @@ int thread_max_priority_in_waiters(struct list *waiters) {
 	int max_priority, cur_priority;
 	struct thread *cur_thread;
 	struct list_elem *cur_waiter_elem;
+
+	ASSERT(intr_get_level() == INTR_OFF);
+
 	max_priority = 0;
 	for (cur_waiter_elem = list_begin(waiters);
 		 cur_waiter_elem != list_end(waiters);
