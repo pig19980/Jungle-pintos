@@ -676,7 +676,11 @@ void thread_donate_priority_to_holder(struct thread *waiter) {
 		holder->real_priority = waiter_waiting_lock->donate_priority;
 		waiter = holder;
 	}
-	list_sort(&ready_list, sort_by_priority_descending, NULL);
+	if (waiter->status == THREAD_READY) {
+		list_remove(&waiter->status_elem);
+		list_insert_ordered(&ready_list, &waiter->status_elem,
+							sort_by_priority_descending, NULL);
+	}
 }
 
 /* Get max priority in waiters of lock.
