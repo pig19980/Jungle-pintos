@@ -660,6 +660,9 @@ bool sort_by_priority_descending(const struct list_elem *a,
 void thread_donate_priority_to_holder(struct thread *waiter) {
 	struct thread *holder;
 	struct lock *waiter_waiting_lock;
+
+	ASSERT(intr_get_level() == INTR_OFF);
+
 	for (;;) {
 		waiter_waiting_lock = waiter->waiting_lock;
 		if (!waiter_waiting_lock ||
