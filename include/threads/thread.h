@@ -27,6 +27,26 @@ typedef int tid_t;
 #define PRI_DEFAULT 31 /* Default priority. */
 #define PRI_MAX 63	 /* Highest priority. */
 
+/* Max depth of nesting semaphore */
+#define NESTING_DEPTH 8
+
+/* Macro for 4BSD Scheduler */
+typedef int32_t myfloat;
+#define DEFAULT_NICE 0 /* Default nice. */
+#define FRAC 16
+
+#define I2F(n) ((n) << FRAC)
+#define F2I(f) ((f) >> FRAC)
+
+#define ADDFF(x, y) ((x) + (y))
+#define SUBFF(x, y) ((x) - (y))
+
+#define MULFF(x, y) ((myfloat)((((int64_t)(x)) * (y)) >> FRAC))
+#define DIVFF(x, y) ((myfloat)((((int64_t)(x)) << FRAC) / (y)))
+
+#define MULFN(x, n) ((x) * (n))
+#define DIVFN(x, n) ((x) / (n))
+
 /* A kernel thread or user process.
  *
  * Each thread structure is stored in its own 4 kB page.  The
@@ -78,7 +98,7 @@ typedef int tid_t;
  * the `magic' member of the running thread's `struct thread' is
  * set to THREAD_MAGIC.  Stack overflow will normally change this
  * value, triggering the assertion. */
-/* The `elem' member has a dual purpose.  It can be an element in
+/* The `status_elem' member has a dual purpose.  It can be an element in
  * the run queue (thread.c), or it can be an element in a
  * semaphore wait list (synch.c).  It can be used these two ways
  * only because they are mutually exclusive: only a thread in the
@@ -89,10 +109,26 @@ struct thread {
 	tid_t tid;				   /* Thread identifier. */
 	enum thread_status status; /* Thread state. */
 	char name[16];			   /* Name (for debugging purposes). */
-	int priority;			   /* Priority. */
+	int priority;			   /* Original priority. */
+	int real_priority;		   /* Real priority */
+	int64_t wake_tick;		   /* Value for check when this thread awake. */
+	/* Value for check whick lock waiting.
+	 * Use this Value to donate recursive. */
+	struct lock *waiting_lock;
+	/* List for locked by this thread.
+	 * Use this list to calculate real priority. */
+	struct list locking_list;
 
 	/* Shared between thread.c and synch.c. */
-	struct list_elem elem; /* List element. */
+	struct list_elem status_elem; /* Status list element. */
+	struct list_elem thread_elem; /* All threads in process list element. */
+
+	/* Value for 4BSD Scheduler.
+	 * Thread nice value. Default is 0 and can changed by thread_get_nice. */
+	int nice;
+	/* Value for 4BSD Scheduler.
+	 * It become bigger when this thread use cpu much recently. */
+	myfloat recent_cpu;
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
@@ -104,7 +140,7 @@ struct thread {
 #endif
 
 	/* Owned by thread.c. */
-	struct intr_frame tf; /* Information for switching */
+	struct intr_frame tf; /* Information for switching. */
 	unsigned magic;		  /* Detects stack overflow. */
 };
 
@@ -141,5 +177,23 @@ int thread_get_recent_cpu(void);
 int thread_get_load_avg(void);
 
 void do_iret(struct intr_frame *tf);
+
+// For sleep machanism
+void thread_sleep(int64_t);
+bool sort_by_tick_ascending(const struct list_elem *, const struct list_elem *,
+							void *);
+void thread_wakeup(int64_t);
+
+// For priority donate
+bool sort_by_priority_descending(const struct list_elem *,
+								 const struct list_elem *, void *);
+int thread_priority_of(struct thread *);
+void thread_donate_priority_to_holder(struct thread *);
+int thread_max_priority_in_waiters(struct list *);
+void thread_reset_real_priority(void);
+
+// For 4BSD Scheduler
+void mlfqs_calculate_all_priority(void);
+void mlfqs_calculate_load_avg_and_recent_cpu(void);
 
 #endif /* threads/thread.h */

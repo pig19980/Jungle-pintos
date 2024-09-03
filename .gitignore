@@ -109,7 +109,7 @@ Temporary Items
 !.vscode/launch.json
 !.vscode/.clang-format
 !.vscode/settings.json
-!.vscode/*.code-snippets
+!.vscode/c_cpp_properties.json
 
 # Local History for Visual Studio Code
 .history/
