@@ -3,7 +3,8 @@
         "*.h": "c",
         "*.inc": "c",
         "*.tcc": "c",
-        "fstream": "c"
+        "fstream": "c",
+        "cstdarg": "c"
     },
     "[c]": {
         "editor.defaultFormatter": "xaver.clang-format",
