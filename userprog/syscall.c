@@ -39,6 +39,10 @@ void syscall_init(void) {
 /* The main system call interface */
 void syscall_handler(struct intr_frame *f UNUSED) {
 	// TODO: Your implementation goes here.
-	printf("system call!\n");
-	thread_exit();
+	printf("system call! %d\n", f->R.rax);
+	if (f->R.rax == 10) {
+		printf("%s %lu\n", (char *)f->R.rsi, f->R.rdx);
+	} else {
+		thread_exit();
+	}
 }

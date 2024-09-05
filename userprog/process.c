@@ -31,9 +31,13 @@ static void __do_fork(void *);
 #define is_process(p) ((p) != NULL && (p)->magic == PROCESS_MAGIC)
 #define running_process() ((struct process *)(pg_round_down(rrsp())))
 
+/* Round down rsp lower 3 bit by masking */
+#define RSP_MASK ((unsigned long)(-1) << 3)
+
 /* General process initializer for initd and other process. */
 static void process_init(void) {
-	struct process *current = process_current();
+	struct process *current = (struct process *)thread_current();
+	current->magic = PROCESS_MAGIC;
 	current->fd_list = palloc_get_page(PAL_ZERO);
 }
 
@@ -199,6 +203,11 @@ int process_wait(tid_t child_tid UNUSED) {
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
+	// temp code for check execution result of child process
+	enum intr_level old_level;
+	old_level = intr_disable();
+	thread_block();
+	intr_set_level(old_level);
 	return -1;
 }
 
@@ -319,6 +328,7 @@ static bool load(const char *file_name, struct intr_frame *if_) {
 	off_t file_ofs;
 	bool success = false;
 	int i;
+	char *temp_ptr;
 
 	/* Allocate and activate page directory. */
 	t->pml4 = pml4_create();
@@ -327,10 +337,17 @@ static bool load(const char *file_name, struct intr_frame *if_) {
 	process_activate(thread_current());
 
 	/* Open executable file. */
+	temp_ptr = strchr(file_name, ' ');
+	if (temp_ptr) {
+		*temp_ptr = '\0';
+	}
 	file = filesys_open(file_name);
 	if (file == NULL) {
 		printf("load: %s: open failed\n", file_name);
 		goto done;
+	}
+	if (temp_ptr) {
+		*temp_ptr = ' ';
 	}
 
 	/* Read and verify executable header. */
@@ -404,6 +421,33 @@ static bool load(const char *file_name, struct intr_frame *if_) {
 
 	/* TODO: Your code goes here.
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
+	char *str_ptr, *save_ptr;
+	void **stack_ptr;
+	void *argv;
+	int argc;
+	size_t offset = strlen(file_name);
+	str_ptr = if_->rsp - offset - 1;
+	memcpy(str_ptr, file_name, offset + 1);
+
+	argc = 1;
+	for (char *ptr = file_name; *ptr != '\0'; ++ptr) {
+		if (*ptr == ' ') {
+			++argc;
+		}
+	}
+
+	stack_ptr = (void **)((uint64_t)str_ptr & RSP_MASK);
+	stack_ptr -= (argc + 1);
+	if_->rsp = stack_ptr - 1;
+	if_->R.rdi = argc;
+	if_->R.rsi = stack_ptr;
+
+	str_ptr = strtok_r(str_ptr, " ", &save_ptr);
+	while (str_ptr) {
+		*stack_ptr = str_ptr;
+		stack_ptr++;
+		str_ptr = strtok_r(NULL, " ", &save_ptr);
+	}
 
 	success = true;
 
