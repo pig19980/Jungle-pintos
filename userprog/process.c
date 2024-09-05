@@ -27,8 +27,15 @@ static bool load(const char *file_name, struct intr_frame *if_);
 static void initd(void *f_name);
 static void __do_fork(void *);
 
+/* Similar macro to is_thread and running_thread */
+#define is_process(p) ((p) != NULL && (p)->magic == PROCESS_MAGIC)
+#define running_process() ((struct process *)(pg_round_down(rrsp())))
+
 /* General process initializer for initd and other process. */
-static void process_init(void) { struct thread *current = thread_current(); }
+static void process_init(void) {
+	struct process *current = process_current();
+	current->fd_list = palloc_get_page(PAL_ZERO);
+}
 
 /* Starts the first userland program, called "initd", loaded from FILE_NAME.
  * The new thread may be scheduled (and may even exit)
@@ -612,3 +619,13 @@ static bool setup_stack(struct intr_frame *if_) {
 	return success;
 }
 #endif /* VM */
+
+struct process *process_current(void) {
+	struct process *p = running_process();
+
+	/* Make sure P is really a process. */
+	ASSERT(is_process(p));
+	ASSERT(p->thread.status == THREAD_RUNNING);
+
+	return p;
+}
