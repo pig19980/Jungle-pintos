@@ -46,23 +46,25 @@ void syscall_init(void) {
    Output argument
    %rax
 */
-void syscall_handler(struct intr_frame *f UNUSED) {
+void syscall_handler(struct intr_frame *f) {
+	struct process *current = process_current();
 	// Projects 2 syscall
 	switch (f->R.rax) {
 	case SYS_HALT:
 		power_off();
 		NOT_REACHED();
 	case SYS_EXIT:
-		// should set status(f->R.rdi) in struct process
+		// should set status(f->R.rdirdict process
+		current->exist_status = f->R.rdi;
 		thread_exit();
-		// process_exit();
-		// NOT_REACHED();
+		NOT_REACHED();
 		break;
 	case SYS_FORK:
 		f->R.rax = process_fork((void *)f->R.rdi, f);
 		break;
 	case SYS_EXEC:
-		f->R.rax = process_exec((void *)f->R.rdi);
+		current->exist_status = process_exec((void *)f->R.rdi);
+		thread_exit();
 		break;
 	case SYS_WAIT:
 		f->R.rax = process_wait(f->R.rdi);

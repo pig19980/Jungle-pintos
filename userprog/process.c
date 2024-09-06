@@ -37,8 +37,24 @@ static void __do_fork(void *);
 /* General process initializer for initd and other process. */
 static void process_init(void) {
 	struct process *current = (struct process *)thread_current();
-	current->magic = PROCESS_MAGIC;
 	current->fd_list = palloc_get_page(PAL_ZERO);
+}
+
+/* Init new process. Called in thread_create. */
+void process_init_in_thread_create(struct process *new) {
+	struct process *current = process_current();
+	new->magic = PROCESS_MAGIC;
+	sema_init(&new->parent_waited, 0);
+	sema_init(&new->exist_status_setted, 0);
+	list_init(&new->child_list);
+	list_push_back(&current->child_list, &new->child_elem);
+	return;
+}
+
+void process_main_init(void) {
+	struct process *current = thread_current();
+	current->magic = PROCESS_MAGIC;
+	list_init(&current->child_list);
 }
 
 /* Starts the first userland program, called "initd", loaded from FILE_NAME.
@@ -47,6 +63,7 @@ static void process_init(void) {
  * thread id, or TID_ERROR if the thread cannot be created.
  * Notice that THIS SHOULD BE CALLED ONCE. */
 tid_t process_create_initd(const char *file_name) {
+	struct process *current;
 	char *fn_copy;
 	tid_t tid;
 
@@ -59,8 +76,11 @@ tid_t process_create_initd(const char *file_name) {
 
 	/* Create a new thread to execute FILE_NAME. */
 	tid = thread_create(file_name, PRI_DEFAULT, initd, fn_copy);
-	if (tid == TID_ERROR)
+	if (tid == TID_ERROR) {
 		palloc_free_page(fn_copy);
+		return tid;
+	}
+
 	return tid;
 }
 
@@ -199,26 +219,44 @@ int process_exec(void *f_name) {
  *
  * This function will be implemented in problem 2-2.  For now, it
  * does nothing. */
-int process_wait(tid_t child_tid UNUSED) {
+int process_wait(tid_t child_tid) {
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
 	// temp code for check execution result of child process
-	enum intr_level old_level;
-	old_level = intr_disable();
-	thread_block();
-	intr_set_level(old_level);
-	return -1;
+	struct process *current, *child, *temp_child;
+	struct list_elem *child_elem;
+	int exist_status;
+
+	current = process_current();
+	child = NULL;
+	for (child_elem = list_begin(&current->child_list);
+		 child_elem != list_end(&current->child_list);
+		 child_elem = list_next(child_elem)) {
+		temp_child = ptr_process(child_elem);
+		if (child_tid == temp_child->thread.tid) {
+			child = temp_child;
+			break;
+		}
+	}
+	if (!child) {
+		return -1;
+	}
+	sema_down(&child->exist_status_setted);
+	printf("%s: exit(%d)\n", child->thread.name, child->exist_status);
+	sema_up(&child->parent_waited);
+	return exist_status;
 }
 
 /* Exit the process. This function is called by thread_exit (). */
 void process_exit(void) {
-	struct thread *curr = thread_current();
+	struct process *curr = process_current();
 	/* TODO: Your code goes here.
 	 * TODO: Implement process termination message (see
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
-
+	sema_up(&curr->exist_status_setted);
+	sema_down(&curr->parent_waited);
 	process_cleanup();
 }
 
