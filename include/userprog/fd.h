@@ -1,6 +1,4 @@
 #include <stdbool.h>
-#include "filesys/file.h"
-#include "userprog/process.h"
 
 bool fd_create(const char *file, unsigned initial_size);
 bool fd_remove(const char *file);
