@@ -4,14 +4,54 @@
 #include "filesys/filesys.h"
 #include "userprog/process.h"
 
-bool fd_create(const char *file, unsigned initial_size) { return false; }
-bool fd_remove(const char *file) { return false; }
-int fd_open(const char *file) { return -1; }
-int fd_filesize(int fd) { return -1; }
+bool fd_create(const char *file, unsigned initial_size) {
+	bool ret;
+	ret = filesys_create(file, initial_size);
+	return ret;
+}
+
+bool fd_remove(const char *file) {
+	bool ret;
+	ret = filesys_remove(file);
+	return ret;
+}
+
+int fd_open(const char *file) {
+	struct file *ret_file;
+	struct process *current;
+	ret_file = filesys_open(file);
+	if (ret_file) {
+		current = process_current();
+		for (int fd = 0; fd < FDSIZE; ++fd) {
+			if (!(*current->fd_list)[fd]) {
+				(*current->fd_list)[fd] = ret_file;
+				return fd;
+			}
+		}
+	}
+
+	return -1;
+}
+
+int fd_filesize(int fd) {
+	struct file *file;
+	struct process *current;
+	int ret;
+
+	current = process_current();
+	file = (*current->fd_list)[fd];
+	if (!file || file == stdin || file == stdout) {
+		return 0;
+	}
+	ret = file_length(file);
+	return ret;
+}
 
 int fd_read(int fd, void *buffer, unsigned size) {
 	struct process *current;
 	struct file *file;
+	int ret;
+
 	current = (struct process *)process_current();
 	file = (*current->fd_list)[fd];
 	if (file == NULL || file == stdout) {
@@ -21,13 +61,17 @@ int fd_read(int fd, void *buffer, unsigned size) {
 			input_getc(buffer + got);
 		}
 		return size;
+	} else {
+		ret = file_read(file, buffer, size);
+		return ret;
 	}
-	return -1;
 }
 
 int fd_write(int fd, const void *buffer, unsigned size) {
 	struct process *current;
 	struct file *file;
+	int ret;
+
 	current = (struct process *)process_current();
 	file = (*current->fd_list)[fd];
 	if (file == NULL || file == stdin) {
@@ -35,11 +79,53 @@ int fd_write(int fd, const void *buffer, unsigned size) {
 	} else if (file == stdout) {
 		putbuf(buffer, size);
 		return size;
+	} else {
+		ret = file_write(file, buffer, size);
+		return ret;
 	}
-	return -1;
 }
 
-void fd_seek(int fd, unsigned position) { return; }
-unsigned fd_tell(int fd) { return 0; }
-void fd_close(int fd) { return; }
+void fd_seek(int fd, unsigned position) {
+	struct process *current;
+	struct file *file;
+	int ret;
+
+	current = (struct process *)process_current();
+	file = (*current->fd_list)[fd];
+	if (!file || file == stdin || file == stdout) {
+		return;
+	}
+	file_seek(file, position);
+}
+
+unsigned fd_tell(int fd) {
+	struct process *current;
+	struct file *file;
+	int ret;
+
+	current = (struct process *)process_current();
+	file = (*current->fd_list)[fd];
+	if (!file || file == stdin || file == stdout) {
+		return 0;
+	}
+	return file_tell(file);
+}
+
+void fd_close(int fd) {
+	struct process *current;
+	struct file *file;
+	int ret;
+
+	current = (struct process *)process_current();
+	file = (*current->fd_list)[fd];
+	if (!file) {
+		return;
+	} else if (file == stdin || file == stdout) {
+		(*current->fd_list)[fd] = NULL;
+		return;
+	}
+	file_close(file);
+	(*current->fd_list)[fd] = NULL;
+}
+
 int fd_dup2(int oldfd, int newfd) { return -1; }

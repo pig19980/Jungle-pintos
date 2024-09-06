@@ -54,6 +54,7 @@ void syscall_handler(struct intr_frame *f) {
 	case SYS_HALT:
 		power_off();
 		NOT_REACHED();
+		break;
 	case SYS_EXIT:
 		// should set status(f->R.rdirdict process
 		current->exist_status = f->R.rdi;

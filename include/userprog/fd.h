@@ -1,4 +1,7 @@
 #include <stdbool.h>
+#include "threads/vaddr.h"
+
+#define FDSIZE (PGSIZE / 8)
 
 bool fd_create(const char *file, unsigned initial_size);
 bool fd_remove(const char *file);
