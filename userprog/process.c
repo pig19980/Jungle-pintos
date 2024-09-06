@@ -429,9 +429,14 @@ static bool load(const char *file_name, struct intr_frame *if_) {
 	memcpy(str_ptr, file_name, offset + 1);
 
 	argc = 1;
-	for (char *ptr = str_ptr; *ptr != '\0'; ++ptr) {
+	for (char *ptr = str_ptr; *ptr != '\0';) {
 		if (*ptr == ' ') {
 			++argc;
+			while (*ptr == ' ') {
+				++ptr;
+			}
+		} else {
+			++ptr;
 		}
 	}
 
@@ -443,6 +448,9 @@ static bool load(const char *file_name, struct intr_frame *if_) {
 
 	str_ptr = strtok_r(str_ptr, " ", &save_ptr);
 	while (str_ptr) {
+		if (*str_ptr == ' ') {
+			continue;
+		}
 		*stack_ptr = str_ptr;
 		stack_ptr++;
 		str_ptr = strtok_r(NULL, " ", &save_ptr);
