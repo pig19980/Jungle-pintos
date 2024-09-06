@@ -36,8 +36,10 @@ static void __do_fork(void *);
 
 /* General process initializer for initd and other process. */
 static void process_init(void) {
-	struct process *current = (struct process *)thread_current();
+	struct process *current = (struct process *)process_current();
 	current->fd_list = palloc_get_page(PAL_ZERO);
+	(*current->fd_list)[STDIN_FILENO] = stdin;
+	(*current->fd_list)[STDOUT_FILENO] = stdout;
 }
 
 /* Init new process. Called in thread_create. */
