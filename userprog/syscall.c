@@ -7,6 +7,7 @@
 #include "userprog/gdt.h"
 #include "threads/flags.h"
 #include "intrinsic.h"
+#include "threads/init.h"
 #include "userprog/fd.h"
 
 void syscall_entry(void);
@@ -53,35 +54,36 @@ void syscall_handler(struct intr_frame *f UNUSED) {
 		NOT_REACHED();
 	case SYS_EXIT:
 		// should set status(f->R.rdi) in struct process
-		process_exit();
-		NOT_REACHED();
+		thread_exit();
+		// process_exit();
+		// NOT_REACHED();
 		break;
 	case SYS_FORK:
-		f->R.rax = process_fork(f->R.rdi, f);
+		f->R.rax = process_fork((void *)f->R.rdi, f);
 		break;
 	case SYS_EXEC:
-		f->R.rax = process_exec(f->R.rdi);
+		f->R.rax = process_exec((void *)f->R.rdi);
 		break;
 	case SYS_WAIT:
 		f->R.rax = process_wait(f->R.rdi);
 		break;
 	case SYS_CREATE:
-		f->R.rax = fd_create(f->R.rdi, f->R.rsi);
+		f->R.rax = fd_create((void *)f->R.rdi, f->R.rsi);
 		break;
 	case SYS_REMOVE:
-		f->R.rax = fd_remove(f->R.rdi);
+		f->R.rax = fd_remove((void *)f->R.rdi);
 		break;
 	case SYS_OPEN:
-		f->R.rax = fd_open(f->R.rdi);
+		f->R.rax = fd_open((void *)f->R.rdi);
 		break;
 	case SYS_FILESIZE:
 		f->R.rax = fd_filesize(f->R.rdi);
 		break;
 	case SYS_READ:
-		f->R.rax = fd_read(f->R.rdi, f->R.rsi, f->R.rdx);
+		f->R.rax = fd_read(f->R.rdi, (void *)f->R.rsi, f->R.rdx);
 		break;
 	case SYS_WRITE:
-		f->R.rax = fd_write(f->R.rdi, f->R.rsi, f->R.rdx);
+		f->R.rax = fd_write(f->R.rdi, (void *)f->R.rsi, f->R.rdx);
 		break;
 	case SYS_SEEK:
 		fd_seek(f->R.rdi, f->R.rsi);
@@ -110,7 +112,7 @@ void syscall_handler(struct intr_frame *f UNUSED) {
 	case SYS_MOUNT:
 	case SYS_UMOUNT:
 	default:
-		printf("system call %d not maid\n", f->R.rax);
+		printf("system call %lld not maid\n", f->R.rax);
 		thread_exit();
 	}
 }

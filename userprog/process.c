@@ -423,14 +423,13 @@ static bool load(const char *file_name, struct intr_frame *if_) {
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
 	char *str_ptr, *save_ptr;
 	void **stack_ptr;
-	void *argv;
 	int argc;
 	size_t offset = strlen(file_name);
-	str_ptr = if_->rsp - offset - 1;
+	str_ptr = (char *)if_->rsp - offset - 1;
 	memcpy(str_ptr, file_name, offset + 1);
 
 	argc = 1;
-	for (char *ptr = file_name; *ptr != '\0'; ++ptr) {
+	for (char *ptr = str_ptr; *ptr != '\0'; ++ptr) {
 		if (*ptr == ' ') {
 			++argc;
 		}
@@ -438,9 +437,9 @@ static bool load(const char *file_name, struct intr_frame *if_) {
 
 	stack_ptr = (void **)((uint64_t)str_ptr & RSP_MASK);
 	stack_ptr -= (argc + 1);
-	if_->rsp = stack_ptr - 1;
-	if_->R.rdi = argc;
-	if_->R.rsi = stack_ptr;
+	if_->rsp = (uintptr_t)(stack_ptr - 1);
+	if_->R.rdi = (uint64_t)argc;
+	if_->R.rsi = (uint64_t)stack_ptr;
 
 	str_ptr = strtok_r(str_ptr, " ", &save_ptr);
 	while (str_ptr) {
