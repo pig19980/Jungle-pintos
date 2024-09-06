@@ -21,7 +21,7 @@
 #ifdef VM
 #include "vm/vm.h"
 #endif
-#include "fd.h"
+#include "userprog/fd.h"
 
 static void process_cleanup(void);
 static bool load(const char *file_name, struct intr_frame *if_);
@@ -264,6 +264,9 @@ void process_exit(void) {
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
 	sema_up(&curr->exist_status_setted);
+	for (int fd = 0; fd < FDSIZE; ++fd) {
+		fd_close(fd);
+	}
 	sema_down(&curr->parent_waited);
 	process_cleanup();
 }
@@ -271,10 +274,6 @@ void process_exit(void) {
 /* Free the current process's resources. */
 static void process_cleanup(void) {
 	struct process *curr = process_current();
-
-	for (int fd = 0; fd < PGSIZE / 8; ++fd) {
-		fd_close(fd);
-	}
 
 #ifdef VM
 	supplemental_page_table_kill(&curr->thread.spt);
