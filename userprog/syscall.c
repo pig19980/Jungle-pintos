@@ -7,6 +7,7 @@
 #include "userprog/gdt.h"
 #include "threads/flags.h"
 #include "intrinsic.h"
+#include "userprog/fd.h"
 
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
@@ -39,10 +40,12 @@ void syscall_init(void) {
 /* The main system call interface */
 void syscall_handler(struct intr_frame *f UNUSED) {
 	// TODO: Your implementation goes here.
-	printf("system call! %d\n", f->R.rax);
-	if (f->R.rax == 10) {
-		printf("%s %lu\n", (char *)f->R.rsi, f->R.rdx);
-	} else {
+	switch (f->R.rax) {
+	case SYS_WRITE:
+		f->R.rax = fd_write(f->R.rdi, f->R.rsi, f->R.rdx);
+		break;
+	default:
+		printf("system call %d not maid\n", f->R.rax);
 		thread_exit();
 	}
 }
