@@ -64,7 +64,7 @@ void process_main_init(void) {
  * Notice that THIS SHOULD BE CALLED ONCE. */
 tid_t process_create_initd(const char *file_name) {
 	struct process *current;
-	char *fn_copy;
+	char *fn_copy, *temp_ptr;
 	tid_t tid;
 
 	/* Make a copy of FILE_NAME.
@@ -73,6 +73,11 @@ tid_t process_create_initd(const char *file_name) {
 	if (fn_copy == NULL)
 		return TID_ERROR;
 	strlcpy(fn_copy, file_name, PGSIZE);
+
+	temp_ptr = strchr(file_name, ' ');
+	if (temp_ptr) {
+		*temp_ptr = '\0';
+	}
 
 	/* Create a new thread to execute FILE_NAME. */
 	tid = thread_create(file_name, PRI_DEFAULT, initd, fn_copy);
