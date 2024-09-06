@@ -21,6 +21,7 @@
 #ifdef VM
 #include "vm/vm.h"
 #endif
+#include "fd.h"
 
 static void process_cleanup(void);
 static bool load(const char *file_name, struct intr_frame *if_);
@@ -269,16 +270,20 @@ void process_exit(void) {
 
 /* Free the current process's resources. */
 static void process_cleanup(void) {
-	struct thread *curr = thread_current();
+	struct process *curr = process_current();
+
+	for (int fd = 0; fd < PGSIZE / 8; ++fd) {
+		fd_close(fd);
+	}
 
 #ifdef VM
-	supplemental_page_table_kill(&curr->spt);
+	supplemental_page_table_kill(&curr->thread.spt);
 #endif
 
 	uint64_t *pml4;
 	/* Destroy the current process's page directory and switch back
 	 * to the kernel-only page directory. */
-	pml4 = curr->pml4;
+	pml4 = curr->thread.pml4;
 	if (pml4 != NULL) {
 		/* Correct ordering here is crucial.  We must set
 		 * cur->pagedir to NULL before switching page directories,
@@ -287,7 +292,7 @@ static void process_cleanup(void) {
 		 * directory before destroying the process's page
 		 * directory, or our active page directory will be one
 		 * that's been freed (and cleared). */
-		curr->pml4 = NULL;
+		curr->thread.pml4 = NULL;
 		pml4_activate(NULL);
 		pml4_destroy(pml4);
 	}
