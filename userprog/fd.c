@@ -13,3 +13,4 @@ int fd_write(int fd, const void *buffer, unsigned size) {
 void fd_seek(int fd, unsigned position) { return; }
 unsigned fd_tell(int fd) { return 0; }
 void fd_close(int fd) { return; }
+int fd_dup2(int oldfd, int newfd) { return -1; }

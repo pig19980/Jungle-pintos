@@ -38,12 +38,77 @@ void syscall_init(void) {
 }
 
 /* The main system call interface */
+/*
+   Input argument
+   arg1  arg2  arg3  arg4  arg5  arg6
+   %rdi, %rsi, %rdx, %r10, %r8,  %r9
+   Output argument
+   %rax
+*/
 void syscall_handler(struct intr_frame *f UNUSED) {
-	// TODO: Your implementation goes here.
+	// Projects 2 syscall
 	switch (f->R.rax) {
+	case SYS_HALT:
+		power_off();
+		NOT_REACHED();
+	case SYS_EXIT:
+		// should set status(f->R.rdi) in struct process
+		process_exit();
+		NOT_REACHED();
+		break;
+	case SYS_FORK:
+		f->R.rax = process_fork(f->R.rdi, f);
+		break;
+	case SYS_EXEC:
+		f->R.rax = process_exec(f->R.rdi);
+		break;
+	case SYS_WAIT:
+		f->R.rax = process_wait(f->R.rdi);
+		break;
+	case SYS_CREATE:
+		f->R.rax = fd_create(f->R.rdi, f->R.rsi);
+		break;
+	case SYS_REMOVE:
+		f->R.rax = fd_remove(f->R.rdi);
+		break;
+	case SYS_OPEN:
+		f->R.rax = fd_open(f->R.rdi);
+		break;
+	case SYS_FILESIZE:
+		f->R.rax = fd_filesize(f->R.rdi);
+		break;
+	case SYS_READ:
+		f->R.rax = fd_read(f->R.rdi, f->R.rsi, f->R.rdx);
+		break;
 	case SYS_WRITE:
 		f->R.rax = fd_write(f->R.rdi, f->R.rsi, f->R.rdx);
 		break;
+	case SYS_SEEK:
+		fd_seek(f->R.rdi, f->R.rsi);
+		break;
+	case SYS_TELL:
+		f->R.rax = fd_tell(f->R.rdi);
+		break;
+	case SYS_CLOSE:
+		fd_close(f->R.rdi);
+		break;
+	case SYS_DUP2:
+		f->R.rax = fd_dup2(f->R.rdi, f->R.rsi);
+		break;
+
+	// Projects 3 syscall
+	case SYS_MMAP:
+	case SYS_MUNMAP:
+
+	// Projects 4 syscall
+	case SYS_CHDIR:
+	case SYS_MKDIR:
+	case SYS_READDIR:
+	case SYS_ISDIR:
+	case SYS_INUMBER:
+	case SYS_SYMLINK:
+	case SYS_MOUNT:
+	case SYS_UMOUNT:
 	default:
 		printf("system call %d not maid\n", f->R.rax);
 		thread_exit();
