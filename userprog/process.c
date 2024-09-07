@@ -345,11 +345,12 @@ void process_exit(void) {
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
 	sema_up(&curr->exist_status_setted);
-	sema_down(&curr->parent_waited);
 
 	process_init();
 	palloc_free_page(curr->fd_list);
 	process_cleanup();
+
+	sema_down(&curr->parent_waited);
 }
 
 /* Free the current process's resources. */
