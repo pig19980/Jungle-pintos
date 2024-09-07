@@ -38,26 +38,35 @@ static void __do_fork(void *);
 /* General process initializer for initd and other process. */
 static void process_init(void) {
 	struct process *current = (struct process *)process_current();
-	current->fd_list = palloc_get_page(PAL_ZERO);
-	(*current->fd_list)[STDIN_FILENO] = stdin;
-	(*current->fd_list)[STDOUT_FILENO] = stdout;
 }
 
-/* Init new process. Called in thread_create. */
-void process_init_in_thread_create(struct process *new) {
+/* Init new process. Called in thread_init. */
+void process_init_in_thread_init(struct process *new) {
 	struct process *current = process_current();
 	new->magic = PROCESS_MAGIC;
 	sema_init(&new->parent_waited, 0);
 	sema_init(&new->exist_status_setted, 0);
 	list_init(&new->child_list);
 	list_push_back(&current->child_list, &new->child_elem);
+
+	new->fd_list = palloc_get_page(PAL_ZERO);
+	(*new->fd_list)[STDIN_FILENO] = stdin;
+	(*new->fd_list)[STDOUT_FILENO] = stdout;
 	return;
 }
 
-void process_main_init(void) {
+/* Sepecial init for initial_thread */
+void process_init_of_initial_thread() {
 	struct process *current = thread_current();
 	current->magic = PROCESS_MAGIC;
+	sema_init(&current->parent_waited, 1);
+	sema_init(&current->exist_status_setted, 0);
 	list_init(&current->child_list);
+
+	current->fd_list = palloc_get_page(PAL_ZERO);
+	(*current->fd_list)[STDIN_FILENO] = stdin;
+	(*current->fd_list)[STDOUT_FILENO] = stdout;
+	return;
 }
 
 /* Starts the first userland program, called "initd", loaded from FILE_NAME.
@@ -264,25 +273,29 @@ void process_exit(void) {
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
 	sema_up(&curr->exist_status_setted);
+
+	// free fd list
 	for (int fd = 0; fd < FDSIZE; ++fd) {
 		fd_close(fd);
 	}
+	palloc_free_page(curr->fd_list);
+
 	sema_down(&curr->parent_waited);
 	process_cleanup();
 }
 
 /* Free the current process's resources. */
 static void process_cleanup(void) {
-	struct process *curr = process_current();
+	struct thread *curr = thread_current();
 
 #ifdef VM
-	supplemental_page_table_kill(&curr->thread.spt);
+	supplemental_page_table_kill(&curr->spt);
 #endif
 
 	uint64_t *pml4;
 	/* Destroy the current process's page directory and switch back
 	 * to the kernel-only page directory. */
-	pml4 = curr->thread.pml4;
+	pml4 = curr->pml4;
 	if (pml4 != NULL) {
 		/* Correct ordering here is crucial.  We must set
 		 * cur->pagedir to NULL before switching page directories,
@@ -291,7 +304,7 @@ static void process_cleanup(void) {
 		 * directory before destroying the process's page
 		 * directory, or our active page directory will be one
 		 * that's been freed (and cleared). */
-		curr->thread.pml4 = NULL;
+		curr->pml4 = NULL;
 		pml4_activate(NULL);
 		pml4_destroy(pml4);
 	}

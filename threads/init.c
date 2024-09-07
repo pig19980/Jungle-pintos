@@ -88,7 +88,7 @@ int main(void) {
 #ifdef USERPROG
 	tss_init();
 	gdt_init();
-	process_main_init();
+	process_init_of_initial_thread();
 #endif
 
 	/* Initialize interrupt handlers. */
