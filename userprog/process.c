@@ -46,7 +46,15 @@ static struct process_fork_arg {
 /* General process initializer for initd and other process. */
 static void process_init(void) {
 	struct process *current = (struct process *)process_current();
-	current->fd_list = palloc_get_page(PAL_ZERO);
+
+	// Free fd list except initial_thread
+	if (current->fd_list) {
+		for (int fd = 0; fd < FDSIZE; ++fd) {
+			fd_close(fd);
+		}
+	} else {
+		current->fd_list = palloc_get_page(PAL_ZERO);
+	}
 }
 
 /* Init new process. Called in thread_init. */
@@ -239,6 +247,13 @@ static void __do_fork(void *aux) {
 				file_duplicate((*current_process->fd_list)[fd]);
 		}
 	}
+	if (parent_process->loaded_file) {
+		current_process->loaded_file = file_duplicate(parent_process->loaded_file);
+		if (!current_process->loaded_file) {
+			goto error;
+		}
+		file_deny_write(current_process->loaded_file);
+	}
 
 	/* Finally, switch to the newly created process. */
 	if (succ) {
@@ -330,31 +345,25 @@ void process_exit(void) {
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
 	sema_up(&curr->exist_status_setted);
-
-	// Free fd list except initial_thread
-	if (curr->fd_list) {
-		for (int fd = 0; fd < FDSIZE; ++fd) {
-			fd_close(fd);
-		}
-		palloc_free_page(curr->fd_list);
-	}
-
 	sema_down(&curr->parent_waited);
+
+	process_init();
+	palloc_free_page(curr->fd_list);
 	process_cleanup();
 }
 
 /* Free the current process's resources. */
 static void process_cleanup(void) {
-	struct thread *curr = thread_current();
+	struct process *curr = thread_current();
 
 #ifdef VM
-	supplemental_page_table_kill(&curr->spt);
+	supplemental_page_table_kill(&curr->thread.spt);
 #endif
 
 	uint64_t *pml4;
 	/* Destroy the current process's page directory and switch back
 	 * to the kernel-only page directory. */
-	pml4 = curr->pml4;
+	pml4 = curr->thread.pml4;
 	if (pml4 != NULL) {
 		/* Correct ordering here is crucial.  We must set
 		 * cur->pagedir to NULL before switching page directories,
@@ -363,9 +372,15 @@ static void process_cleanup(void) {
 		 * directory before destroying the process's page
 		 * directory, or our active page directory will be one
 		 * that's been freed (and cleared). */
-		curr->pml4 = NULL;
+		curr->thread.pml4 = NULL;
 		pml4_activate(NULL);
 		pml4_destroy(pml4);
+	}
+
+	if (curr->loaded_file) {
+		file_allow_write(curr->loaded_file);
+		file_close(curr->loaded_file);
+		curr->loaded_file = NULL;
 	}
 }
 
@@ -444,6 +459,7 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
  * Returns true if successful, false otherwise. */
 static bool load(const char *file_name, struct intr_frame *if_) {
 	struct thread *t = thread_current();
+	struct process *p = process_current();
 	struct ELF ehdr;
 	struct file *file = NULL;
 	off_t file_ofs;
@@ -467,6 +483,8 @@ static bool load(const char *file_name, struct intr_frame *if_) {
 		printf("load: %s: open failed\n", file_name);
 		goto done;
 	}
+	p->loaded_file = file;
+	file_deny_write(file);
 	if (temp_ptr) {
 		*temp_ptr = ' ';
 	}
@@ -581,7 +599,10 @@ static bool load(const char *file_name, struct intr_frame *if_) {
 
 done:
 	/* We arrive here whether the load is successful or not. */
-	file_close(file);
+	if (!success && p->loaded_file) {
+		file_allow_write(p->loaded_file);
+		file_close(p->loaded_file);
+	}
 	return success;
 }
 

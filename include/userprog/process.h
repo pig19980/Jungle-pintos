@@ -22,7 +22,8 @@ struct process {
 	struct semaphore exist_status_setted;
 	/* Lock for accessing data of this process by other process*/
 	struct lock data_access_lock;
-	unsigned magic; /* Detects stack overflow. */
+	struct file *loaded_file; /* Opened file by this process */
+	unsigned magic;			  /* Detects stack overflow. */
 };
 
 tid_t process_create_initd(const char *file_name);
