@@ -10,6 +10,8 @@
 #include "threads/init.h"
 #include "userprog/fd.h"
 #include "userprog/process.h"
+#include <string.h>
+#include "threads/palloc.h"
 
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
@@ -78,7 +80,16 @@ void syscall_handler(struct intr_frame *f) {
 		break;
 	case SYS_EXEC:
 		syscall_check_vaddr(f->R.rdi, current);
-		current->exist_status = process_exec((void *)f->R.rdi);
+
+		char *fn_copy, *temp_ptr;
+		fn_copy = palloc_get_page(0);
+		if (fn_copy == NULL) {
+			current->exist_status = -1;
+			thread_exit();
+		}
+		strlcpy(fn_copy, f->R.rdi, PGSIZE);
+
+		current->exist_status = process_exec(fn_copy);
 		thread_exit();
 		break;
 	case SYS_WAIT:
