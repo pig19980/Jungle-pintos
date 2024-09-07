@@ -4,6 +4,7 @@
 #include "threads/thread.h"
 #include "threads/synch.h"
 #include <list.h>
+#include "userprog/fd.h"
 #define PROCESS_MAGIC 0xcd6abf4b
 
 /* Similar with ptr_thread */
@@ -11,7 +12,7 @@
 
 struct process {
 	struct thread thread;
-	struct file *(*fd_list)[64];
+	struct file *(*fd_list)[FDSIZE];
 	int exist_status;
 	struct list child_list;
 	struct list_elem child_elem;
@@ -19,6 +20,8 @@ struct process {
 	struct semaphore parent_waited;
 	/* Sema up when this process set exist status */
 	struct semaphore exist_status_setted;
+	/* Lock for accessing data of this process by other process*/
+	struct lock data_access_lock;
 	unsigned magic; /* Detects stack overflow. */
 };
 

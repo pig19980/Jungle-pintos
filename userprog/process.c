@@ -38,34 +38,38 @@ static void __do_fork(void *);
 /* General process initializer for initd and other process. */
 static void process_init(void) {
 	struct process *current UNUSED = (struct process *)process_current();
+	current->fd_list = palloc_get_page(PAL_ZERO);
 }
 
 /* Init new process. Called in thread_init. */
 void process_init_in_thread_init(struct process *new) {
 	struct process *current = process_current();
+
 	new->magic = PROCESS_MAGIC;
+
 	sema_init(&new->parent_waited, 0);
 	sema_init(&new->exist_status_setted, 0);
+	lock_init(&new->data_access_lock);
+
 	list_init(&new->child_list);
 	list_push_back(&current->child_list, &new->child_elem);
 
-	new->fd_list = palloc_get_page(PAL_ZERO);
-	(*new->fd_list)[STDIN_FILENO] = stdin;
-	(*new->fd_list)[STDOUT_FILENO] = stdout;
 	return;
 }
 
 /* Sepecial init for initial_thread */
 void process_init_of_initial_thread(void) {
 	struct process *current = (struct process *)thread_current();
+
 	current->magic = PROCESS_MAGIC;
+
 	sema_init(&current->parent_waited, 1);
 	sema_init(&current->exist_status_setted, 0);
+	lock_init(&current->data_access_lock);
+
 	list_init(&current->child_list);
 
 	current->fd_list = palloc_get_page(PAL_ZERO);
-	(*current->fd_list)[STDIN_FILENO] = stdin;
-	(*current->fd_list)[STDOUT_FILENO] = stdout;
 	return;
 }
 
@@ -102,11 +106,16 @@ tid_t process_create_initd(const char *file_name) {
 
 /* A thread function that launches first user process. */
 static void initd(void *f_name) {
+	struct process *current;
+
 #ifdef VM
 	supplemental_page_table_init(&thread_current()->spt);
 #endif
 
 	process_init();
+	current = process_current();
+	(*current->fd_list)[STDIN_FILENO] = stdin;
+	(*current->fd_list)[STDOUT_FILENO] = stdout;
 
 	if (process_exec(f_name) < 0)
 		PANIC("Fail to launch initd\n");
@@ -115,9 +124,12 @@ static void initd(void *f_name) {
 
 /* Clones the current process as `name`. Returns the new process's thread id, or
  * TID_ERROR if the thread cannot be created. */
-tid_t process_fork(const char *name, struct intr_frame *if_ UNUSED) {
+tid_t process_fork(const char *name, struct intr_frame *if_) {
 	/* Clone current thread to new thread.*/
-	return thread_create(name, PRI_DEFAULT, __do_fork, thread_current());
+	void *fork_arg = palloc_get_page(0);
+	memcpy(fork_arg, if_, sizeof(struct intr_frame));
+	*(void **)(fork_arg + sizeof(struct intr_frame)) = thread_current();
+	return thread_create(name, PRI_DEFAULT, __do_fork, fork_arg);
 }
 
 #ifndef VM
@@ -131,6 +143,8 @@ static bool duplicate_pte(uint64_t *pte, void *va, void *aux) {
 	bool writable;
 
 	/* 1. TODO: If the parent_page is kernel page, then return immediately. */
+	if (is_kernel_vaddr(va))
+		return;
 
 	/* 2. Resolve VA from the parent's page map level 4. */
 	parent_page = pml4_get_page(parent->pml4, va);
@@ -157,10 +171,10 @@ static bool duplicate_pte(uint64_t *pte, void *va, void *aux) {
  *       this function. */
 static void __do_fork(void *aux) {
 	struct intr_frame if_;
-	struct thread *parent = (struct thread *)aux;
+	struct thread *parent = (struct thread *)(aux + sizeof(struct intr_frame));
 	struct thread *current = thread_current();
 	/* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
-	struct intr_frame *parent_if;
+	struct intr_frame *parent_if = (struct intr_frame *)aux;
 	bool succ = true;
 
 	/* 1. Read the cpu context to local stack. */
@@ -188,11 +202,28 @@ static void __do_fork(void *aux) {
 	 * TODO:       the resources of parent.*/
 
 	process_init();
+	struct file *(*parent_fd_list)[FDSIZE] =
+		((struct process *)parent)->fd_list;
+	struct file *(*current_fd_list)[FDSIZE] =
+		((struct process *)current)->fd_list;
+
+	lock_acquire(&((struct process *)parent)->data_access_lock);
+	memcpy(current_fd_list, parent_fd_list, PGSIZE);
+	lock_release(&((struct process *)parent)->data_access_lock);
+	for (int fd = 0; fd < FDSIZE; ++fd) {
+		if ((*current_fd_list)[fd] && (*current_fd_list)[fd] != stdin &&
+			(*current_fd_list)[fd] != stdout) {
+			(*current_fd_list)[fd] = file_duplicate((*current_fd_list)[fd]);
+		}
+	}
 
 	/* Finally, switch to the newly created process. */
-	if (succ)
+	if (succ) {
+		palloc_free_page(aux);
 		do_iret(&if_);
+	}
 error:
+	palloc_free_page(aux);
 	thread_exit();
 }
 
@@ -273,11 +304,13 @@ void process_exit(void) {
 	 * TODO: We recommend you to implement process resource cleanup here. */
 	sema_up(&curr->exist_status_setted);
 
-	// free fd list
-	for (int fd = 0; fd < FDSIZE; ++fd) {
-		fd_close(fd);
+	// Free fd list except initial_thread
+	if (curr->fd_list) {
+		for (int fd = 0; fd < FDSIZE; ++fd) {
+			fd_close(fd);
+		}
+		palloc_free_page(curr->fd_list);
 	}
-	palloc_free_page(curr->fd_list);
 
 	sema_down(&curr->parent_waited);
 	process_cleanup();
