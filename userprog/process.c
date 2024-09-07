@@ -37,7 +37,7 @@ static void __do_fork(void *);
 
 /* General process initializer for initd and other process. */
 static void process_init(void) {
-	struct process *current = (struct process *)process_current();
+	struct process *current UNUSED = (struct process *)process_current();
 }
 
 /* Init new process. Called in thread_init. */
@@ -56,8 +56,8 @@ void process_init_in_thread_init(struct process *new) {
 }
 
 /* Sepecial init for initial_thread */
-void process_init_of_initial_thread() {
-	struct process *current = thread_current();
+void process_init_of_initial_thread(void) {
+	struct process *current = (struct process *)thread_current();
 	current->magic = PROCESS_MAGIC;
 	sema_init(&current->parent_waited, 1);
 	sema_init(&current->exist_status_setted, 0);
@@ -75,7 +75,6 @@ void process_init_of_initial_thread() {
  * thread id, or TID_ERROR if the thread cannot be created.
  * Notice that THIS SHOULD BE CALLED ONCE. */
 tid_t process_create_initd(const char *file_name) {
-	struct process *current;
 	char *fn_copy, *temp_ptr;
 	tid_t tid;
 
