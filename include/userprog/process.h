@@ -19,9 +19,7 @@ struct process {
 	struct semaphore parent_waited;
 	/* Sema up when this process set exist status */
 	struct semaphore exist_status_setted;
-	bool syscall_va_valid_checking; /* Check virtual address is valid in system
-									   call */
-	unsigned magic;					/* Detects stack overflow. */
+	unsigned magic; /* Detects stack overflow. */
 };
 
 tid_t process_create_initd(const char *file_name);

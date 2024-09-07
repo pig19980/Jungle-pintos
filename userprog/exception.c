@@ -142,19 +142,16 @@ static void page_fault(struct intr_frame *f) {
 		return;
 #endif
 
-	struct process *curr;
-	curr = process_current();
-	if (curr->syscall_va_valid_checking) {
-		curr->exist_status = -1;
-		thread_exit();
-	}
-
 	/* Count page faults. */
 	page_fault_cnt++;
 
+	struct process *curr;
+	curr = process_current();
+	curr->exist_status = -1;
+	thread_exit();
 	/* If the fault is true fault, show info and exit. */
-	printf("Page fault at %p: %s error %s page in %s context.\n", fault_addr,
-		   not_present ? "not present" : "rights violation",
-		   write ? "writing" : "reading", user ? "user" : "kernel");
-	kill(f);
+	// printf("Page fault at %p: %s error %s page in %s context.\n", fault_addr,
+	// 	   not_present ? "not present" : "rights violation",
+	// 	   write ? "writing" : "reading", user ? "user" : "kernel");
+	// kill(f);
 }

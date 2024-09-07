@@ -13,7 +13,7 @@
 
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
-void syscall_check_vaddr(uint64_t);
+void syscall_check_vaddr(uint64_t, struct process *);
 
 /* System call.
  *
@@ -40,18 +40,13 @@ void syscall_init(void) {
 			  FLAG_IF | FLAG_TF | FLAG_DF | FLAG_IOPL | FLAG_AC | FLAG_NT);
 }
 
-void syscall_check_vaddr(uint64_t va) {
-	struct process *curr;
+void syscall_check_vaddr(uint64_t va, struct process *curr) {
 	int temp;
-
-	curr = process_current();
 	if (!is_user_vaddr(va)) {
 		curr->exist_status = -1;
 		thread_exit();
 	}
-	curr->syscall_va_valid_checking = true;
 	temp = *(int *)va;
-	curr->syscall_va_valid_checking = false;
 	return;
 }
 
@@ -78,9 +73,11 @@ void syscall_handler(struct intr_frame *f) {
 		NOT_REACHED();
 		break;
 	case SYS_FORK:
+		syscall_check_vaddr(f->R.rdi, current);
 		f->R.rax = process_fork((void *)f->R.rdi, f);
 		break;
 	case SYS_EXEC:
+		syscall_check_vaddr(f->R.rdi, current);
 		current->exist_status = process_exec((void *)f->R.rdi);
 		thread_exit();
 		break;
@@ -88,22 +85,26 @@ void syscall_handler(struct intr_frame *f) {
 		f->R.rax = process_wait(f->R.rdi);
 		break;
 	case SYS_CREATE:
-		syscall_check_vaddr(f->R.rdi);
+		syscall_check_vaddr(f->R.rdi, current);
 		f->R.rax = fd_create((void *)f->R.rdi, f->R.rsi);
 		break;
 	case SYS_REMOVE:
+		syscall_check_vaddr(f->R.rdi, current);
 		f->R.rax = fd_remove((void *)f->R.rdi);
 		break;
 	case SYS_OPEN:
+		syscall_check_vaddr(f->R.rdi, current);
 		f->R.rax = fd_open((void *)f->R.rdi);
 		break;
 	case SYS_FILESIZE:
 		f->R.rax = fd_filesize(f->R.rdi);
 		break;
 	case SYS_READ:
+		syscall_check_vaddr(f->R.rsi, current);
 		f->R.rax = fd_read(f->R.rdi, (void *)f->R.rsi, f->R.rdx);
 		break;
 	case SYS_WRITE:
+		syscall_check_vaddr(f->R.rsi, current);
 		f->R.rax = fd_write(f->R.rdi, (void *)f->R.rsi, f->R.rdx);
 		break;
 	case SYS_SEEK:
