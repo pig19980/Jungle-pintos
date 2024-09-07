@@ -13,6 +13,7 @@
 
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
+void syscall_check_vaddr(uint64_t);
 
 /* System call.
  *
@@ -37,6 +38,21 @@ void syscall_init(void) {
 	 * mode stack. Therefore, we masked the FLAG_FL. */
 	write_msr(MSR_SYSCALL_MASK,
 			  FLAG_IF | FLAG_TF | FLAG_DF | FLAG_IOPL | FLAG_AC | FLAG_NT);
+}
+
+void syscall_check_vaddr(uint64_t va) {
+	struct process *curr;
+	int temp;
+
+	curr = process_current();
+	if (!is_user_vaddr(va)) {
+		curr->exist_status = -1;
+		thread_exit();
+	}
+	curr->syscall_va_valid_checking = true;
+	temp = *(int *)va;
+	curr->syscall_va_valid_checking = false;
+	return;
 }
 
 /* The main system call interface */
@@ -72,6 +88,7 @@ void syscall_handler(struct intr_frame *f) {
 		f->R.rax = process_wait(f->R.rdi);
 		break;
 	case SYS_CREATE:
+		syscall_check_vaddr(f->R.rdi);
 		f->R.rax = fd_create((void *)f->R.rdi, f->R.rsi);
 		break;
 	case SYS_REMOVE:

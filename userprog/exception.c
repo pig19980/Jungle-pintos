@@ -5,6 +5,7 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "intrinsic.h"
+#include "userprog/process.h"
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -140,6 +141,13 @@ static void page_fault(struct intr_frame *f) {
 	if (vm_try_handle_fault(f, fault_addr, user, write, not_present))
 		return;
 #endif
+
+	struct process *curr;
+	curr = process_current();
+	if (curr->syscall_va_valid_checking) {
+		curr->exist_status = -1;
+		thread_exit();
+	}
 
 	/* Count page faults. */
 	page_fault_cnt++;
