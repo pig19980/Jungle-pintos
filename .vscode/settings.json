@@ -5,7 +5,8 @@
         "*.tcc": "c",
         "fstream": "c",
         "cstdarg": "c",
-        "cmath": "c"
+        "cmath": "c",
+        "thread": "c"
     },
     "[c]": {
         "editor.defaultFormatter": "xaver.clang-format",
