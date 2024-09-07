@@ -259,6 +259,7 @@ int process_wait(tid_t child_tid) {
 		return -1;
 	}
 	sema_down(&child->exist_status_setted);
+	printf("%s: exit(%d)\n", child->thread.name, child->exist_status);
 	sema_up(&child->parent_waited);
 	return exist_status;
 }
@@ -270,9 +271,6 @@ void process_exit(void) {
 	 * TODO: Implement process termination message (see
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
-
-	printf("%s: exit(%d)\n", curr->thread.name, curr->exist_status);
-
 	sema_up(&curr->exist_status_setted);
 
 	// free fd list
