@@ -69,7 +69,6 @@ void process_init_of_initial_thread(void) {
 
 	list_init(&current->child_list);
 
-	current->fd_list = palloc_get_page(PAL_ZERO);
 	return;
 }
 
