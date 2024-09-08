@@ -69,7 +69,10 @@ void process_init_in_thread_init(struct process *new) {
 	lock_init(&new->data_access_lock);
 
 	list_init(&new->child_list);
+
+	lock_acquire(&current->data_access_lock);
 	list_push_back(&current->child_list, &new->child_elem);
+	lock_release(&current->data_access_lock);
 
 	return;
 }
@@ -269,7 +272,10 @@ static void __do_fork(void *aux) {
 error:
 	fork_arg->fork_result = TID_ERROR;
 	sema_up(&current_process->parent_waited);
+
+	lock_acquire(&parent_process->data_access_lock);
 	list_remove(&current_process->child_elem);
+	lock_release(&parent_process->data_access_lock);
 
 	sema_up(&fork_arg->fork_done);
 	thread_exit();
@@ -325,6 +331,7 @@ int process_wait(tid_t child_tid) {
 
 	current = process_current();
 	child = NULL;
+	lock_acquire(&current->data_access_lock);
 	for (child_elem = list_begin(&current->child_list);
 		 child_elem != list_end(&current->child_list);
 		 child_elem = list_next(child_elem)) {
@@ -335,6 +342,7 @@ int process_wait(tid_t child_tid) {
 			break;
 		}
 	}
+	lock_release(&current->data_access_lock);
 	if (!child) {
 		return -1;
 	}
