@@ -394,7 +394,6 @@ static void process_cleanup(void) {
 	}
 
 	if (curr->loaded_file) {
-		file_allow_write(curr->loaded_file);
 		file_close(curr->loaded_file);
 		curr->loaded_file = NULL;
 	}
