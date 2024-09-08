@@ -4,6 +4,13 @@
 #include "filesys/filesys.h"
 #include "userprog/process.h"
 
+static bool check_fd(int fd) {
+	if (0 <= fd && fd < FDSIZE)
+		return true;
+	else
+		return false;
+}
+
 bool fd_create(const char *file, unsigned initial_size) {
 	bool ret;
 	ret = filesys_create(file, initial_size);
@@ -39,6 +46,10 @@ int fd_filesize(int fd) {
 	struct process *current;
 	int ret;
 
+	if (!check_fd(fd)) {
+		return 0;
+	}
+
 	current = process_current();
 	file = (*current->fd_list)[fd];
 	if (!file || file == stdin || file == stdout) {
@@ -52,6 +63,10 @@ int fd_read(int fd, void *buffer, unsigned size) {
 	struct process *current;
 	struct file *file;
 	int ret;
+
+	if (!check_fd(fd)) {
+		return 0;
+	}
 
 	current = (struct process *)process_current();
 	file = (*current->fd_list)[fd];
@@ -73,6 +88,10 @@ int fd_write(int fd, const void *buffer, unsigned size) {
 	struct file *file;
 	int ret;
 
+	if (!check_fd(fd)) {
+		return 0;
+	}
+
 	current = (struct process *)process_current();
 	file = (*current->fd_list)[fd];
 	if (file == NULL || file == stdin) {
@@ -91,6 +110,10 @@ void fd_seek(int fd, unsigned position) {
 	struct file *file;
 	int ret;
 
+	if (!check_fd(fd)) {
+		return 0;
+	}
+
 	current = (struct process *)process_current();
 	file = (*current->fd_list)[fd];
 	if (!file || file == stdin || file == stdout) {
@@ -103,6 +126,10 @@ unsigned fd_tell(int fd) {
 	struct process *current;
 	struct file *file;
 	int ret;
+
+	if (!check_fd(fd)) {
+		return 0;
+	}
 
 	current = (struct process *)process_current();
 	file = (*current->fd_list)[fd];
@@ -117,6 +144,10 @@ void fd_close(int fd) {
 	struct file *file;
 	int ret;
 
+	if (!check_fd(fd)) {
+		return 0;
+	}
+
 	current = (struct process *)process_current();
 	file = (*current->fd_list)[fd];
 	if (file == stdin || file == stdout) {
@@ -130,6 +161,10 @@ void fd_close(int fd) {
 int fd_dup2(int oldfd, int newfd) {
 	struct process *current;
 	struct file *oldfile, *newfile;
+
+	if (!check_fd(oldfd) || !check_fd(newfd)) {
+		return -1;
+	}
 
 	current = (struct process *)process_current();
 	oldfile = (*current->fd_list)[oldfd];
