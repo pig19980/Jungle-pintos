@@ -237,14 +237,20 @@ static void __do_fork(void *aux) {
 	 * TODO:       the resources of parent.*/
 
 	process_init();
+	if (!current_process->fd_list) {
+		goto error;
+	}
 
-	memcpy(current_process->fd_list, parent_process->fd_list, PGSIZE);
+	struct file *parent_file;
 	for (int fd = 0; fd < FDSIZE; ++fd) {
-		if ((*current_process->fd_list)[fd] &&
-			(*current_process->fd_list)[fd] != stdin &&
-			(*current_process->fd_list)[fd] != stdout) {
-			(*current_process->fd_list)[fd] =
-				file_duplicate((*current_process->fd_list)[fd]);
+		parent_file = (*parent_process->fd_list)[fd];
+		if (parent_file == stdin || parent_file == stdout) {
+			(*current_process->fd_list)[fd] = parent_file;
+		} else if (parent_file) {
+			(*current_process->fd_list)[fd] = file_duplicate(parent_file);
+			if (!(*current_process->fd_list)[fd]) {
+				goto error;
+			}
 		}
 	}
 	if (parent_process->loaded_file) {
@@ -349,8 +355,14 @@ void process_exit(void) {
 	 * TODO: We recommend you to implement process resource cleanup here. */
 	sema_up(&curr->exist_status_setted);
 
-	process_init();
-	palloc_free_page(curr->fd_list);
+	if (curr->fd_list) {
+		for (int fd = 0; fd < FDSIZE; ++fd) {
+			fd_close(fd);
+		}
+		palloc_free_page(curr->fd_list);
+	}
+	// process_init();
+	// palloc_free_page(curr->fd_list);
 	process_cleanup();
 
 	sema_down(&curr->parent_waited);

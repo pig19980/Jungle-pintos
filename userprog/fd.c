@@ -28,6 +28,7 @@ int fd_open(const char *file) {
 				return fd;
 			}
 		}
+		file_close(ret_file);
 	}
 
 	return -1;
@@ -118,14 +119,12 @@ void fd_close(int fd) {
 
 	current = (struct process *)process_current();
 	file = (*current->fd_list)[fd];
-	if (!file) {
-		return;
-	} else if (file == stdin || file == stdout) {
+	if (file == stdin || file == stdout) {
 		(*current->fd_list)[fd] = NULL;
-		return;
+	} else if (file) {
+		file_close(file);
+		(*current->fd_list)[fd] = NULL;
 	}
-	file_close(file);
-	(*current->fd_list)[fd] = NULL;
 }
 
 int fd_dup2(int oldfd, int newfd) { return -1; }
