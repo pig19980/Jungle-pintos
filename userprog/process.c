@@ -49,9 +49,7 @@ static void process_init(void) {
 
 	// Free fd list except initial_thread
 	if (current->fd_list) {
-		for (int fd = 0; fd < FDSIZE; ++fd) {
-			fd_close(fd, *current->fd_list);
-		}
+		fd_close_all(current->fd_list);
 	} else {
 		current->fd_list = palloc_get_page(PAL_ZERO);
 	}
@@ -361,14 +359,10 @@ void process_exit(void) {
 	 * TODO: We recommend you to implement process resource cleanup here. */
 	sema_up(&curr->exist_status_setted);
 
-	// if (curr->fd_list) {
-	// 	for (int fd = 0; fd < FDSIZE; ++fd) {
-	// 		fd_close(fd);
-	// 	}
-	// 	palloc_free_page(curr->fd_list);
-	// }
-	process_init();
-	palloc_free_page(curr->fd_list);
+	if (curr->fd_list) {
+		fd_close_all(curr->fd_list);
+		palloc_free_page(curr->fd_list);
+	}
 	process_cleanup();
 
 	sema_down(&curr->parent_waited);

@@ -155,3 +155,9 @@ int fd_dup2(int oldfd, int newfd, fd_list fd_list) {
 	}
 	return newfd;
 }
+
+void fd_close_all(fd_list fd_list) {
+	for (int fd = 0; fd < FDSIZE; ++fd) {
+		fd_close(fd, fd_list);
+	}
+}
