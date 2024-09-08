@@ -3,8 +3,6 @@
 
 #define FDSIZE (PGSIZE / 8)
 
-bool fd_create(const char *file, unsigned initial_size);
-bool fd_remove(const char *file);
 int fd_open(const char *file);
 int fd_filesize(int fd);
 int fd_read(int fd, void *buffer, unsigned size);

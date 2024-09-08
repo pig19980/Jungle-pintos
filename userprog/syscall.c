@@ -96,11 +96,11 @@ void syscall_handler(struct intr_frame *f) {
 		break;
 	case SYS_CREATE:
 		syscall_check_vaddr(f->R.rdi, current);
-		f->R.rax = fd_create((void *)f->R.rdi, f->R.rsi);
+		f->R.rax = filesys_create((void *)f->R.rdi, f->R.rsi);
 		break;
 	case SYS_REMOVE:
 		syscall_check_vaddr(f->R.rdi, current);
-		f->R.rax = fd_remove((void *)f->R.rdi);
+		f->R.rax = filesys_remove((void *)f->R.rdi);
 		break;
 	case SYS_OPEN:
 		syscall_check_vaddr(f->R.rdi, current);

@@ -11,18 +11,6 @@ static bool check_fd(int fd) {
 		return false;
 }
 
-bool fd_create(const char *file, unsigned initial_size) {
-	bool ret;
-	ret = filesys_create(file, initial_size);
-	return ret;
-}
-
-bool fd_remove(const char *file) {
-	bool ret;
-	ret = filesys_remove(file);
-	return ret;
-}
-
 int fd_open(const char *file) {
 	struct file *ret_file;
 	struct process *current;
