@@ -335,6 +335,7 @@ void thread_set_priority(int new_priority) {
 }
 
 /* Returns the current thread's priority. */
+/* This function is safty but slower than thread_priority_of */
 int thread_get_priority(void) {
 	enum intr_level old_level = intr_disable();
 	int priority = thread_priority_of(thread_current());
