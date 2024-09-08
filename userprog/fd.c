@@ -175,11 +175,16 @@ int fd_dup2(int oldfd, int newfd) {
 	}
 
 	newfile = (*current->fd_list)[newfd];
-	(*current->fd_list)[newfd] = file_duplicate(oldfile);
-
-	if (!(*current->fd_list)[newfd]) {
-		return -1;
+	if (oldfile == stdin || oldfile == stdout) {
+		(*current->fd_list)[newfd] = oldfile;
+	} else {
+		(*current->fd_list)[newfd] = file_duplicate(oldfile);
+		if (!(*current->fd_list)[newfd]) {
+			(*current->fd_list)[newfd] = newfile;
+			return -1;
+		}
 	}
+
 	if (newfile != stdin && newfile != stdout) {
 		file_close(newfile);
 	}
