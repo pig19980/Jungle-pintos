@@ -141,18 +141,17 @@ static void initd(void *f_name) {
  * TID_ERROR if the thread cannot be created. */
 tid_t process_fork(const char *name, struct intr_frame *if_) {
 	/* Clone current thread to new thread.*/
-	struct process_fork_arg *fork_arg = palloc_get_page(0);
-	memcpy(&fork_arg->if_, if_, sizeof(struct intr_frame));
-	fork_arg->parent = thread_current();
-	sema_init(&fork_arg->fork_done, 0);
+	struct process_fork_arg fork_arg;
+	memcpy(&fork_arg.if_, if_, sizeof(struct intr_frame));
+	fork_arg.parent = thread_current();
+	sema_init(&fork_arg.fork_done, 0);
 
-	int tid = thread_create(name, PRI_DEFAULT, __do_fork, fork_arg);
+	int tid = thread_create(name, PRI_DEFAULT, __do_fork, &fork_arg);
 	if (tid == TID_ERROR)
 		return tid;
 
-	sema_down(&fork_arg->fork_done);
-	tid = fork_arg->fork_result;
-	palloc_free_page(fork_arg);
+	sema_down(&fork_arg.fork_done);
+	tid = fork_arg.fork_result;
 	return tid;
 }
 
