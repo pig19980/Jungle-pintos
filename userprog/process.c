@@ -29,6 +29,7 @@ static bool load(const char *file_name, struct intr_frame *if_);
 static void initd(void *f_name);
 static void __do_fork(void *);
 
+/* Struct for give argument to __do_fork */
 static struct process_fork_arg {
 	struct intr_frame if_;
 	struct thread *parent;
@@ -143,7 +144,7 @@ tid_t process_fork(const char *name, struct intr_frame *if_) {
 	/* Clone current thread to new thread.*/
 	struct process_fork_arg fork_arg;
 	memcpy(&fork_arg.if_, if_, sizeof(struct intr_frame));
-	fork_arg.parent = thread_current();
+	fork_arg.parent = process_current();
 	sema_init(&fork_arg.fork_done, 0);
 
 	int tid = thread_create(name, PRI_DEFAULT, __do_fork, &fork_arg);
@@ -202,10 +203,10 @@ static bool duplicate_pte(uint64_t *pte, void *va, void *aux) {
 static void __do_fork(void *aux) {
 	struct process_fork_arg *fork_arg = (struct process_fork_arg *)aux;
 	struct intr_frame if_;
-	struct thread *parent = fork_arg->parent;
-	struct thread *current = thread_current();
-	struct process *parent_process = (struct process *)parent;
-	struct process *current_process = (struct process *)current;
+	struct thread *parent_thread = fork_arg->parent;
+	struct thread *current_thread = thread_current();
+	struct process *parent_process = (struct process *)parent_thread;
+	struct process *current_process = (struct process *)current_thread;
 
 	/* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
 	struct intr_frame *parent_if = &fork_arg->if_;
@@ -216,17 +217,17 @@ static void __do_fork(void *aux) {
 	if_.R.rax = 0;
 
 	/* 2. Duplicate PT */
-	current->pml4 = pml4_create();
-	if (current->pml4 == NULL)
+	current_thread->pml4 = pml4_create();
+	if (current_thread->pml4 == NULL)
 		goto error;
 
-	process_activate(current);
+	process_activate(current_thread);
 #ifdef VM
-	supplemental_page_table_init(&current->spt);
-	if (!supplemental_page_table_copy(&current->spt, &parent->spt))
+	supplemental_page_table_init(&current_thread->spt);
+	if (!supplemental_page_table_copy(&current_thread->spt, &parent_thread->spt))
 		goto error;
 #else
-	if (!pml4_for_each(parent->pml4, duplicate_pte, parent))
+	if (!pml4_for_each(parent_thread->pml4, duplicate_pte, parent_thread))
 		goto error;
 #endif
 
@@ -261,7 +262,7 @@ static void __do_fork(void *aux) {
 
 	/* Finally, switch to the newly created process. */
 	if (succ) {
-		fork_arg->fork_result = current->tid;
+		fork_arg->fork_result = current_thread->tid;
 		sema_up(&fork_arg->fork_done);
 		do_iret(&if_);
 	}
@@ -353,14 +354,14 @@ void process_exit(void) {
 	 * TODO: We recommend you to implement process resource cleanup here. */
 	sema_up(&curr->exist_status_setted);
 
-	if (curr->fd_list) {
-		for (int fd = 0; fd < FDSIZE; ++fd) {
-			fd_close(fd);
-		}
-		palloc_free_page(curr->fd_list);
-	}
-	// process_init();
-	// palloc_free_page(curr->fd_list);
+	// if (curr->fd_list) {
+	// 	for (int fd = 0; fd < FDSIZE; ++fd) {
+	// 		fd_close(fd);
+	// 	}
+	// 	palloc_free_page(curr->fd_list);
+	// }
+	process_init();
+	palloc_free_page(curr->fd_list);
 	process_cleanup();
 
 	sema_down(&curr->parent_waited);
