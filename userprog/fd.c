@@ -127,4 +127,26 @@ void fd_close(int fd) {
 	}
 }
 
-int fd_dup2(int oldfd, int newfd) { return -1; }
+int fd_dup2(int oldfd, int newfd) {
+	struct process *current;
+	struct file *oldfile, *newfile;
+
+	current = (struct process *)process_current();
+	oldfile = (*current->fd_list)[oldfd];
+	if (oldfile == NULL) {
+		return -1;
+	} else if (oldfd == newfd) {
+		return newfd;
+	}
+
+	newfile = (*current->fd_list)[newfd];
+	(*current->fd_list)[newfd] = file_duplicate(oldfile);
+
+	if (!(*current->fd_list)[newfd]) {
+		return -1;
+	}
+	if (newfile != stdin && newfile != stdout) {
+		file_close(newfile);
+	}
+	return newfd;
+}
