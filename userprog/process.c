@@ -22,7 +22,6 @@
 #include "vm/vm.h"
 #endif
 #include "userprog/fd.h"
-#include "threads/pte.h"
 
 static void process_cleanup(void);
 static bool load(const char *file_name, struct intr_frame *if_);
@@ -51,7 +50,7 @@ static void process_init(void) {
 	// Free fd list except initial_thread
 	if (current->fd_list) {
 		for (int fd = 0; fd < FDSIZE; ++fd) {
-			fd_close(fd);
+			fd_close(fd, *current->fd_list);
 		}
 	} else {
 		current->fd_list = palloc_get_page(PAL_ZERO);

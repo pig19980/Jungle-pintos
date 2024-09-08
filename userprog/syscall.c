@@ -104,30 +104,30 @@ void syscall_handler(struct intr_frame *f) {
 		break;
 	case SYS_OPEN:
 		syscall_check_vaddr(f->R.rdi, current);
-		f->R.rax = fd_open((void *)f->R.rdi);
+		f->R.rax = fd_open((void *)f->R.rdi, *current->fd_list);
 		break;
 	case SYS_FILESIZE:
-		f->R.rax = fd_filesize(f->R.rdi);
+		f->R.rax = fd_filesize(f->R.rdi, *current->fd_list);
 		break;
 	case SYS_READ:
 		syscall_check_vaddr(f->R.rsi, current);
-		f->R.rax = fd_read(f->R.rdi, (void *)f->R.rsi, f->R.rdx);
+		f->R.rax = fd_read(f->R.rdi, (void *)f->R.rsi, f->R.rdx, *current->fd_list);
 		break;
 	case SYS_WRITE:
 		syscall_check_vaddr(f->R.rsi, current);
-		f->R.rax = fd_write(f->R.rdi, (void *)f->R.rsi, f->R.rdx);
+		f->R.rax = fd_write(f->R.rdi, (void *)f->R.rsi, f->R.rdx, *current->fd_list);
 		break;
 	case SYS_SEEK:
-		fd_seek(f->R.rdi, f->R.rsi);
+		fd_seek(f->R.rdi, f->R.rsi, *current->fd_list);
 		break;
 	case SYS_TELL:
-		f->R.rax = fd_tell(f->R.rdi);
+		f->R.rax = fd_tell(f->R.rdi, *current->fd_list);
 		break;
 	case SYS_CLOSE:
-		fd_close(f->R.rdi);
+		fd_close(f->R.rdi, *current->fd_list);
 		break;
 	case SYS_DUP2:
-		f->R.rax = fd_dup2(f->R.rdi, f->R.rsi);
+		f->R.rax = fd_dup2(f->R.rdi, f->R.rsi, *current->fd_list);
 		break;
 
 	// Projects 3 syscall

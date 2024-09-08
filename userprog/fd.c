@@ -1,8 +1,6 @@
 #include "userprog/fd.h"
-#include "filesys/file.h"
-#include <stdio.h>
+#include <stddef.h>
 #include "filesys/filesys.h"
-#include "userprog/process.h"
 
 static bool check_fd(int fd) {
 	if (0 <= fd && fd < FDSIZE)
@@ -11,15 +9,14 @@ static bool check_fd(int fd) {
 		return false;
 }
 
-int fd_open(const char *file) {
+int fd_open(const char *file, fd_list fd_list) {
 	struct file *ret_file;
-	struct process *current;
+
 	ret_file = filesys_open(file);
 	if (ret_file) {
-		current = process_current();
 		for (int fd = 0; fd < FDSIZE; ++fd) {
-			if (!(*current->fd_list)[fd]) {
-				(*current->fd_list)[fd] = ret_file;
+			if (!fd_list[fd]) {
+				fd_list[fd] = ret_file;
 				return fd;
 			}
 		}
@@ -29,17 +26,15 @@ int fd_open(const char *file) {
 	return -1;
 }
 
-int fd_filesize(int fd) {
+int fd_filesize(int fd, fd_list fd_list) {
 	struct file *file;
-	struct process *current;
 	int ret;
 
 	if (!check_fd(fd)) {
 		return 0;
 	}
 
-	current = process_current();
-	file = (*current->fd_list)[fd];
+	file = fd_list[fd];
 	if (!file || file == stdin || file == stdout) {
 		return 0;
 	}
@@ -47,17 +42,14 @@ int fd_filesize(int fd) {
 	return ret;
 }
 
-int fd_read(int fd, void *buffer, unsigned size) {
-	struct process *current;
+int fd_read(int fd, void *buffer, unsigned size, fd_list fd_list) {
 	struct file *file;
 	int ret;
 
 	if (!check_fd(fd)) {
 		return 0;
 	}
-
-	current = (struct process *)process_current();
-	file = (*current->fd_list)[fd];
+	file = fd_list[fd];
 	if (file == NULL || file == stdout) {
 		return 0;
 	} else if (file == stdin) {
@@ -71,17 +63,14 @@ int fd_read(int fd, void *buffer, unsigned size) {
 	}
 }
 
-int fd_write(int fd, const void *buffer, unsigned size) {
-	struct process *current;
+int fd_write(int fd, const void *buffer, unsigned size, fd_list fd_list) {
 	struct file *file;
 	int ret;
 
 	if (!check_fd(fd)) {
 		return 0;
 	}
-
-	current = (struct process *)process_current();
-	file = (*current->fd_list)[fd];
+	file = fd_list[fd];
 	if (file == NULL || file == stdin) {
 		return 0;
 	} else if (file == stdout) {
@@ -93,82 +82,70 @@ int fd_write(int fd, const void *buffer, unsigned size) {
 	}
 }
 
-void fd_seek(int fd, unsigned position) {
-	struct process *current;
+void fd_seek(int fd, unsigned position, fd_list fd_list) {
 	struct file *file;
 	int ret;
 
 	if (!check_fd(fd)) {
 		return 0;
 	}
-
-	current = (struct process *)process_current();
-	file = (*current->fd_list)[fd];
+	file = fd_list[fd];
 	if (!file || file == stdin || file == stdout) {
 		return;
 	}
 	file_seek(file, position);
 }
 
-unsigned fd_tell(int fd) {
-	struct process *current;
+unsigned fd_tell(int fd, fd_list fd_list) {
 	struct file *file;
 	int ret;
 
 	if (!check_fd(fd)) {
 		return 0;
 	}
-
-	current = (struct process *)process_current();
-	file = (*current->fd_list)[fd];
+	file = fd_list[fd];
 	if (!file || file == stdin || file == stdout) {
 		return 0;
 	}
 	return file_tell(file);
 }
 
-void fd_close(int fd) {
-	struct process *current;
+void fd_close(int fd, fd_list fd_list) {
 	struct file *file;
 	int ret;
 
 	if (!check_fd(fd)) {
 		return 0;
 	}
-
-	current = (struct process *)process_current();
-	file = (*current->fd_list)[fd];
+	file = fd_list[fd];
 	if (file == stdin || file == stdout) {
-		(*current->fd_list)[fd] = NULL;
+		fd_list[fd] = NULL;
 	} else if (file) {
 		file_close(file);
-		(*current->fd_list)[fd] = NULL;
+		fd_list[fd] = NULL;
 	}
 }
 
-int fd_dup2(int oldfd, int newfd) {
-	struct process *current;
+int fd_dup2(int oldfd, int newfd, fd_list fd_list) {
 	struct file *oldfile, *newfile;
 
 	if (!check_fd(oldfd) || !check_fd(newfd)) {
 		return -1;
 	}
-
-	current = (struct process *)process_current();
-	oldfile = (*current->fd_list)[oldfd];
+	oldfile = fd_list[oldfd];
 	if (oldfile == NULL) {
 		return -1;
 	} else if (oldfd == newfd) {
 		return newfd;
 	}
 
-	newfile = (*current->fd_list)[newfd];
+	newfile = fd_list[newfd];
 	if (oldfile == stdin || oldfile == stdout) {
-		(*current->fd_list)[newfd] = oldfile;
+		fd_list[newfd] = oldfile;
 	} else {
-		(*current->fd_list)[newfd] = file_plus_open_cnt(oldfile);
-		if (!(*current->fd_list)[newfd]) {
-			(*current->fd_list)[newfd] = newfile;
+		fd_list[newfd] = file_plus_open_cnt(oldfile);
+		if (!fd_list[newfd]) {
+			fd_list[newfd] = newfile;
 			return -1;
 		}
 	}
