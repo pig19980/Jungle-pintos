@@ -27,6 +27,9 @@ void file_seek(struct file *, off_t);
 off_t file_tell(struct file *);
 off_t file_length(struct file *);
 
+/* For dup2 */
+struct file *file_plus_open_cnt(struct file *);
+
 extern struct file _stdin;
 extern struct file _stdout;
 

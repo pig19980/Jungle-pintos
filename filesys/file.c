@@ -45,26 +45,16 @@ struct file *file_reopen(struct file *file) {
 /* Duplicate the file object including attributes and returns a new file for the
  * same inode as FILE. Returns a null pointer if unsuccessful. */
 struct file *file_duplicate(struct file *file) {
-	if (!file) {
-		return NULL;
-	}
 	if (file == &_stdin || file == &_stdout) {
 		return file;
 	}
-	if (!inode_reopen(file->inode))
-		return NULL;
-	file->open_cnt++;
-	if (file->deny_write) {
-		file_deny_write(file);
+	struct file *nfile = file_open(inode_reopen(file->inode));
+	if (nfile) {
+		nfile->pos = file->pos;
+		if (file->deny_write)
+			file_deny_write(nfile);
 	}
-	return file;
-	// struct file *nfile = file_open(inode_reopen(file->inode));
-	// if (nfile) {
-	// 	nfile->pos = file->pos;
-	// 	if (file->deny_write)
-	// 		file_deny_write(nfile);
-	// }
-	// return nfile;
+	return nfile;
 }
 
 /* Closes FILE. */
@@ -169,4 +159,20 @@ void file_seek(struct file *file, off_t new_pos) {
 off_t file_tell(struct file *file) {
 	ASSERT(file != NULL);
 	return file->pos;
+}
+
+struct file *file_plus_open_cnt(struct file *file) {
+	if (!file) {
+		return NULL;
+	}
+	if (file == &_stdin || file == &_stdout) {
+		return file;
+	}
+	if (!inode_reopen(file->inode))
+		return NULL;
+	file->open_cnt++;
+	if (file->deny_write) {
+		file_deny_write(file);
+	}
+	return file;
 }
