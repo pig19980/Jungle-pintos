@@ -156,6 +156,7 @@ int fd_dup2(int oldfd, int newfd, fd_list fd_list) {
 	return newfd;
 }
 
+/* Close all fd. Called in process_init and process_exit */
 void fd_close_all(fd_list fd_list) {
 	for (int fd = 0; fd < FDSIZE; ++fd) {
 		fd_close(fd, fd_list);
