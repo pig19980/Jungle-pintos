@@ -60,11 +60,14 @@ struct file *file_duplicate(struct file *file) {
 /* Closes FILE. */
 void file_close(struct file *file) {
 	if (file != NULL) {
-		file_allow_write(file);
-		inode_close(file->inode);
 		file->open_cnt--;
-		if (file->open_cnt == 0)
+		if (file->open_cnt == 0) {
+			file_allow_write(file);
+			inode_close(file->inode);
 			free(file);
+		} else {
+			inode_close(file->inode);
+		}
 	}
 }
 
@@ -171,8 +174,5 @@ struct file *file_plus_open_cnt(struct file *file) {
 	if (!inode_reopen(file->inode))
 		return NULL;
 	file->open_cnt++;
-	if (file->deny_write) {
-		file_deny_write(file);
-	}
 	return file;
 }
