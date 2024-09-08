@@ -241,16 +241,8 @@ static void __do_fork(void *aux) {
 	if (!current_process->fd_list) {
 		goto error;
 	}
-
-	struct file *parent_file;
-	for (int fd = 0; fd < FDSIZE; ++fd) {
-		parent_file = (*parent_process->fd_list)[fd];
-		if (parent_file) {
-			(*current_process->fd_list)[fd] = file_duplicate(parent_file);
-			if (!(*current_process->fd_list)[fd]) {
-				goto error;
-			}
-		}
+	if (!fd_dup_fd_list(*current_process->fd_list, *parent_process->fd_list)) {
+		goto error;
 	}
 	if (parent_process->loaded_file) {
 		current_process->loaded_file = file_reopen(parent_process->loaded_file);

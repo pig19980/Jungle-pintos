@@ -162,3 +162,18 @@ void fd_close_all(fd_list fd_list) {
 		fd_close(fd, fd_list);
 	}
 }
+
+/* Duplicate file in src_list to dst_list */
+bool fd_dup_fd_list(fd_list dst_list, fd_list src_list) {
+	struct file *src_file;
+	for (int fd = 0; fd < FDSIZE; ++fd) {
+		src_file = src_list[fd];
+		if (src_file) {
+			dst_list[fd] = file_duplicate(src_file);
+			if (!dst_list[fd]) {
+				return false;
+			}
+		}
+	}
+	return true;
+}
