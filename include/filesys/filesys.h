@@ -17,4 +17,8 @@ bool filesys_create(const char *name, off_t initial_size);
 struct file *filesys_open(const char *name);
 bool filesys_remove(const char *name);
 
+/* Define file for console I/O */
+extern struct file *stdin;  /* Standard input stream.  */
+extern struct file *stdout; /* Standard output stream.  */
+
 #endif /* filesys/filesys.h */

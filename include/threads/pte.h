@@ -7,15 +7,14 @@
  * See vaddr.h for more generic functions and macros for virtual addresses.
  *
  * Virtual addresses are structured as follows:
- *  63          48 47            39 38            30 29            21 20 12 11 0
+ *  63          48 47            39 38            30 29            21 20         12 11         0
  * +-------------+----------------+----------------+----------------+-------------+------------+
- * | Sign Extend |    Page-Map    | Page-Directory | Page-directory | Page-Table
- * |  Physical  | |             | Level-4 Offset |    Pointer     |     Offset
- * |   Offset    |   Offset   |
+ * | Sign Extend |    Page-Map    | Page-Directory | Page-directory |  Page-Table |  Physical  |
+ * |             | Level-4 Offset |    Pointer     |     Offset     |   Offset    |   Offset   |
  * +-------------+----------------+----------------+----------------+-------------+------------+
- *               |                |                |                | | |
- *               +------- 9 ------+------- 9 ------+------- 9 ------+----- 9
- * -----+---- 12 ----+ Virtual Address
+ *               |                |                |                |             |            |
+ *               +------- 9 ------+------- 9 ------+------- 9 ------+----- 9 -----+---- 12 ----+
+ *                                         Virtual Address
  */
 
 #define PML4SHIFT 39UL
@@ -41,6 +40,6 @@
 #define PTE_W 0x2							/* 1=read/write, 0=read-only. */
 #define PTE_U 0x4							/* 1=user/kernel, 0=kernel only. */
 #define PTE_A 0x20							/* 1=accessed, 0=not acccessed. */
-#define PTE_D 0x40 /* 1=dirty, 0=not dirty (PTEs only). */
+#define PTE_D 0x40							/* 1=dirty, 0=not dirty (PTEs only). */
 
 #endif /* threads/pte.h */

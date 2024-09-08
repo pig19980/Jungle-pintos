@@ -21,14 +21,72 @@
 #ifdef VM
 #include "vm/vm.h"
 #endif
+#include "userprog/fd.h"
+#include "threads/pte.h"
 
 static void process_cleanup(void);
 static bool load(const char *file_name, struct intr_frame *if_);
 static void initd(void *f_name);
 static void __do_fork(void *);
 
+static struct process_fork_arg {
+	struct intr_frame if_;
+	struct thread *parent;
+	struct semaphore fork_done;
+	int fork_result;
+};
+
+/* Similar macro to is_thread and running_thread */
+#define is_process(p) ((p) != NULL && (p)->magic == PROCESS_MAGIC)
+#define running_process() ((struct process *)(pg_round_down(rrsp())))
+
+/* Round down rsp lower 3 bit by masking */
+#define RSP_MASK ((unsigned long)(-1) << 3)
+
 /* General process initializer for initd and other process. */
-static void process_init(void) { struct thread *current = thread_current(); }
+static void process_init(void) {
+	struct process *current = (struct process *)process_current();
+
+	// Free fd list except initial_thread
+	if (current->fd_list) {
+		for (int fd = 0; fd < FDSIZE; ++fd) {
+			fd_close(fd);
+		}
+	} else {
+		current->fd_list = palloc_get_page(PAL_ZERO);
+	}
+}
+
+/* Init new process. Called in thread_init. */
+void process_init_in_thread_init(struct process *new) {
+	struct process *current = process_current();
+
+	new->magic = PROCESS_MAGIC;
+
+	sema_init(&new->parent_waited, 0);
+	sema_init(&new->exist_status_setted, 0);
+	lock_init(&new->data_access_lock);
+
+	list_init(&new->child_list);
+	list_push_back(&current->child_list, &new->child_elem);
+
+	return;
+}
+
+/* Sepecial init for initial_thread */
+void process_init_of_initial_thread(void) {
+	struct process *current = (struct process *)thread_current();
+
+	current->magic = PROCESS_MAGIC;
+
+	sema_init(&current->parent_waited, 1);
+	sema_init(&current->exist_status_setted, 0);
+	lock_init(&current->data_access_lock);
+
+	list_init(&current->child_list);
+
+	return;
+}
 
 /* Starts the first userland program, called "initd", loaded from FILE_NAME.
  * The new thread may be scheduled (and may even exit)
@@ -36,7 +94,7 @@ static void process_init(void) { struct thread *current = thread_current(); }
  * thread id, or TID_ERROR if the thread cannot be created.
  * Notice that THIS SHOULD BE CALLED ONCE. */
 tid_t process_create_initd(const char *file_name) {
-	char *fn_copy;
+	char *fn_copy, *temp_ptr;
 	tid_t tid;
 
 	/* Make a copy of FILE_NAME.
@@ -46,20 +104,33 @@ tid_t process_create_initd(const char *file_name) {
 		return TID_ERROR;
 	strlcpy(fn_copy, file_name, PGSIZE);
 
+	temp_ptr = strchr(file_name, ' ');
+	if (temp_ptr) {
+		*temp_ptr = '\0';
+	}
+
 	/* Create a new thread to execute FILE_NAME. */
 	tid = thread_create(file_name, PRI_DEFAULT, initd, fn_copy);
-	if (tid == TID_ERROR)
+	if (tid == TID_ERROR) {
 		palloc_free_page(fn_copy);
+		return tid;
+	}
+
 	return tid;
 }
 
 /* A thread function that launches first user process. */
 static void initd(void *f_name) {
+	struct process *current;
+
 #ifdef VM
 	supplemental_page_table_init(&thread_current()->spt);
 #endif
 
 	process_init();
+	current = process_current();
+	(*current->fd_list)[STDIN_FILENO] = stdin;
+	(*current->fd_list)[STDOUT_FILENO] = stdout;
 
 	if (process_exec(f_name) < 0)
 		PANIC("Fail to launch initd\n");
@@ -68,9 +139,20 @@ static void initd(void *f_name) {
 
 /* Clones the current process as `name`. Returns the new process's thread id, or
  * TID_ERROR if the thread cannot be created. */
-tid_t process_fork(const char *name, struct intr_frame *if_ UNUSED) {
+tid_t process_fork(const char *name, struct intr_frame *if_) {
 	/* Clone current thread to new thread.*/
-	return thread_create(name, PRI_DEFAULT, __do_fork, thread_current());
+	struct process_fork_arg fork_arg;
+	memcpy(&fork_arg.if_, if_, sizeof(struct intr_frame));
+	fork_arg.parent = thread_current();
+	sema_init(&fork_arg.fork_done, 0);
+
+	int tid = thread_create(name, PRI_DEFAULT, __do_fork, &fork_arg);
+	if (tid == TID_ERROR)
+		return tid;
+
+	sema_down(&fork_arg.fork_done);
+	tid = fork_arg.fork_result;
+	return tid;
 }
 
 #ifndef VM
@@ -84,21 +166,30 @@ static bool duplicate_pte(uint64_t *pte, void *va, void *aux) {
 	bool writable;
 
 	/* 1. TODO: If the parent_page is kernel page, then return immediately. */
+	if (is_kernel_vaddr(va))
+		return true;
 
 	/* 2. Resolve VA from the parent's page map level 4. */
 	parent_page = pml4_get_page(parent->pml4, va);
 
 	/* 3. TODO: Allocate new PAL_USER page for the child and set result to
 	 *    TODO: NEWPAGE. */
+	newpage = palloc_get_page(PAL_USER);
+	if (!newpage)
+		return false;
 
 	/* 4. TODO: Duplicate parent's page to the new page and
 	 *    TODO: check whether parent's page is writable or not (set WRITABLE
 	 *    TODO: according to the result). */
+	memcpy(newpage, parent_page, PGSIZE);
+	writable = *pte & PTE_W;
 
 	/* 5. Add new page to child's page table at address VA with WRITABLE
 	 *    permission. */
 	if (!pml4_set_page(current->pml4, va, newpage, writable)) {
 		/* 6. TODO: if fail to insert page, do error handling. */
+		palloc_free_page(newpage);
+		return false;
 	}
 	return true;
 }
@@ -109,15 +200,20 @@ static bool duplicate_pte(uint64_t *pte, void *va, void *aux) {
  *       That is, you are required to pass second argument of process_fork to
  *       this function. */
 static void __do_fork(void *aux) {
+	struct process_fork_arg *fork_arg = (struct process_fork_arg *)aux;
 	struct intr_frame if_;
-	struct thread *parent = (struct thread *)aux;
+	struct thread *parent = fork_arg->parent;
 	struct thread *current = thread_current();
+	struct process *parent_process = (struct process *)parent;
+	struct process *current_process = (struct process *)current;
+
 	/* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
-	struct intr_frame *parent_if;
+	struct intr_frame *parent_if = &fork_arg->if_;
 	bool succ = true;
 
 	/* 1. Read the cpu context to local stack. */
 	memcpy(&if_, parent_if, sizeof(struct intr_frame));
+	if_.R.rax = 0;
 
 	/* 2. Duplicate PT */
 	current->pml4 = pml4_create();
@@ -141,11 +237,40 @@ static void __do_fork(void *aux) {
 	 * TODO:       the resources of parent.*/
 
 	process_init();
+	if (!current_process->fd_list) {
+		goto error;
+	}
+
+	struct file *parent_file;
+	for (int fd = 0; fd < FDSIZE; ++fd) {
+		parent_file = (*parent_process->fd_list)[fd];
+		if (parent_file) {
+			(*current_process->fd_list)[fd] = file_duplicate(parent_file);
+			if (!(*current_process->fd_list)[fd]) {
+				goto error;
+			}
+		}
+	}
+	if (parent_process->loaded_file) {
+		current_process->loaded_file = file_reopen(parent_process->loaded_file);
+		if (!current_process->loaded_file) {
+			goto error;
+		}
+		file_deny_write(current_process->loaded_file);
+	}
 
 	/* Finally, switch to the newly created process. */
-	if (succ)
+	if (succ) {
+		fork_arg->fork_result = current->tid;
+		sema_up(&fork_arg->fork_done);
 		do_iret(&if_);
+	}
 error:
+	fork_arg->fork_result = TID_ERROR;
+	sema_up(&current_process->parent_waited);
+	list_remove(&current_process->child_elem);
+
+	sema_up(&fork_arg->fork_done);
 	thread_exit();
 }
 
@@ -188,36 +313,71 @@ int process_exec(void *f_name) {
  *
  * This function will be implemented in problem 2-2.  For now, it
  * does nothing. */
-int process_wait(tid_t child_tid UNUSED) {
+int process_wait(tid_t child_tid) {
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
-	return -1;
+	// temp code for check execution result of child process
+	struct process *current, *child, *temp_child;
+	struct list_elem *child_elem;
+	int exist_status;
+
+	current = process_current();
+	child = NULL;
+	for (child_elem = list_begin(&current->child_list);
+		 child_elem != list_end(&current->child_list);
+		 child_elem = list_next(child_elem)) {
+		temp_child = ptr_process(child_elem);
+		if (child_tid == temp_child->thread.tid) {
+			child = temp_child;
+			list_remove(child_elem);
+			break;
+		}
+	}
+	if (!child) {
+		return -1;
+	}
+	sema_down(&child->exist_status_setted);
+	exist_status = child->exist_status;
+	printf("%s: exit(%d)\n", child->thread.name, child->exist_status);
+	sema_up(&child->parent_waited);
+	return exist_status;
 }
 
 /* Exit the process. This function is called by thread_exit (). */
 void process_exit(void) {
-	struct thread *curr = thread_current();
+	struct process *curr = process_current();
 	/* TODO: Your code goes here.
 	 * TODO: Implement process termination message (see
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
+	sema_up(&curr->exist_status_setted);
 
+	if (curr->fd_list) {
+		for (int fd = 0; fd < FDSIZE; ++fd) {
+			fd_close(fd);
+		}
+		palloc_free_page(curr->fd_list);
+	}
+	// process_init();
+	// palloc_free_page(curr->fd_list);
 	process_cleanup();
+
+	sema_down(&curr->parent_waited);
 }
 
 /* Free the current process's resources. */
 static void process_cleanup(void) {
-	struct thread *curr = thread_current();
+	struct process *curr = thread_current();
 
 #ifdef VM
-	supplemental_page_table_kill(&curr->spt);
+	supplemental_page_table_kill(&curr->thread.spt);
 #endif
 
 	uint64_t *pml4;
 	/* Destroy the current process's page directory and switch back
 	 * to the kernel-only page directory. */
-	pml4 = curr->pml4;
+	pml4 = curr->thread.pml4;
 	if (pml4 != NULL) {
 		/* Correct ordering here is crucial.  We must set
 		 * cur->pagedir to NULL before switching page directories,
@@ -226,9 +386,14 @@ static void process_cleanup(void) {
 		 * directory before destroying the process's page
 		 * directory, or our active page directory will be one
 		 * that's been freed (and cleared). */
-		curr->pml4 = NULL;
+		curr->thread.pml4 = NULL;
 		pml4_activate(NULL);
 		pml4_destroy(pml4);
+	}
+
+	if (curr->loaded_file) {
+		file_close(curr->loaded_file);
+		curr->loaded_file = NULL;
 	}
 }
 
@@ -307,11 +472,13 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
  * Returns true if successful, false otherwise. */
 static bool load(const char *file_name, struct intr_frame *if_) {
 	struct thread *t = thread_current();
+	struct process *p = process_current();
 	struct ELF ehdr;
 	struct file *file = NULL;
 	off_t file_ofs;
 	bool success = false;
 	int i;
+	char *temp_ptr;
 
 	/* Allocate and activate page directory. */
 	t->pml4 = pml4_create();
@@ -320,10 +487,19 @@ static bool load(const char *file_name, struct intr_frame *if_) {
 	process_activate(thread_current());
 
 	/* Open executable file. */
+	temp_ptr = strchr(file_name, ' ');
+	if (temp_ptr) {
+		*temp_ptr = '\0';
+	}
 	file = filesys_open(file_name);
 	if (file == NULL) {
 		printf("load: %s: open failed\n", file_name);
 		goto done;
+	}
+	p->loaded_file = file;
+	file_deny_write(file);
+	if (temp_ptr) {
+		*temp_ptr = ' ';
 	}
 
 	/* Read and verify executable header. */
@@ -397,12 +573,49 @@ static bool load(const char *file_name, struct intr_frame *if_) {
 
 	/* TODO: Your code goes here.
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
+	char *str_ptr, *save_ptr;
+	void **stack_ptr;
+	int argc;
+	size_t offset = strlen(file_name);
+	str_ptr = (char *)if_->rsp - offset - 1;
+	memcpy(str_ptr, file_name, offset + 1);
+
+	argc = 1;
+	for (char *ptr = str_ptr; *ptr != '\0';) {
+		if (*ptr == ' ') {
+			++argc;
+			while (*ptr == ' ') {
+				++ptr;
+			}
+		} else {
+			++ptr;
+		}
+	}
+
+	stack_ptr = (void **)((uint64_t)str_ptr & RSP_MASK);
+	stack_ptr -= (argc + 1);
+	if_->rsp = (uintptr_t)(stack_ptr - 1);
+	if_->R.rdi = (uint64_t)argc;
+	if_->R.rsi = (uint64_t)stack_ptr;
+
+	str_ptr = strtok_r(str_ptr, " ", &save_ptr);
+	while (str_ptr) {
+		if (*str_ptr == ' ') {
+			continue;
+		}
+		*stack_ptr = str_ptr;
+		stack_ptr++;
+		str_ptr = strtok_r(NULL, " ", &save_ptr);
+	}
 
 	success = true;
 
 done:
 	/* We arrive here whether the load is successful or not. */
-	file_close(file);
+	if (!success && p->loaded_file) {
+		file_allow_write(p->loaded_file);
+		file_close(p->loaded_file);
+	}
 	return success;
 }
 
@@ -612,3 +825,13 @@ static bool setup_stack(struct intr_frame *if_) {
 	return success;
 }
 #endif /* VM */
+
+struct process *process_current(void) {
+	struct process *p = running_process();
+
+	/* Make sure P is really a process. */
+	ASSERT(is_process(p));
+	ASSERT(p->thread.status == THREAD_RUNNING);
+
+	return p;
+}

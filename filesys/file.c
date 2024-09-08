@@ -2,13 +2,20 @@
 #include <debug.h>
 #include "filesys/inode.h"
 #include "threads/malloc.h"
+#include "threads/synch.h"
 
 /* An open file. */
 struct file {
 	struct inode *inode; /* File's inode. */
 	off_t pos;			 /* Current position. */
 	bool deny_write;	 /* Has file_deny_write() been called? */
+
+	int open_cnt;			 /* Number of openers. */
+	struct lock access_lock; /* Data access lock */
 };
+
+struct file _stdin;
+struct file _stdout;
 
 /* Opens a file for the given INODE, of which it takes ownership,
  * and returns the new file.  Returns a null pointer if an
@@ -19,6 +26,8 @@ struct file *file_open(struct inode *inode) {
 		file->inode = inode;
 		file->pos = 0;
 		file->deny_write = false;
+		file->open_cnt = 1;
+		lock_init(&file->access_lock);
 		return file;
 	} else {
 		inode_close(inode);
@@ -36,6 +45,9 @@ struct file *file_reopen(struct file *file) {
 /* Duplicate the file object including attributes and returns a new file for the
  * same inode as FILE. Returns a null pointer if unsuccessful. */
 struct file *file_duplicate(struct file *file) {
+	if (file == &_stdin || file == &_stdout) {
+		return file;
+	}
 	struct file *nfile = file_open(inode_reopen(file->inode));
 	if (nfile) {
 		nfile->pos = file->pos;
@@ -50,7 +62,9 @@ void file_close(struct file *file) {
 	if (file != NULL) {
 		file_allow_write(file);
 		inode_close(file->inode);
-		free(file);
+		file->open_cnt--;
+		if (file->open_cnt == 0)
+			free(file);
 	}
 }
 
@@ -145,4 +159,20 @@ void file_seek(struct file *file, off_t new_pos) {
 off_t file_tell(struct file *file) {
 	ASSERT(file != NULL);
 	return file->pos;
+}
+
+struct file *file_plus_open_cnt(struct file *file) {
+	if (!file) {
+		return NULL;
+	}
+	if (file == &_stdin || file == &_stdout) {
+		return file;
+	}
+	if (!inode_reopen(file->inode))
+		return NULL;
+	file->open_cnt++;
+	if (file->deny_write) {
+		file_deny_write(file);
+	}
+	return file;
 }

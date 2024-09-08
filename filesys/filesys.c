@@ -11,6 +11,9 @@
 /* The disk that contains the file system. */
 struct disk *filesys_disk;
 
+struct file *stdin;
+struct file *stdout;
+
 static void do_format(void);
 
 /* Initializes the file system module.
@@ -38,6 +41,8 @@ void filesys_init(bool format) {
 
 	free_map_open();
 #endif
+	stdin = &_stdin;
+	stdout = &_stdout;
 }
 
 /* Shuts down the file system module, writing any unwritten data
