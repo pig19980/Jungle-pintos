@@ -204,6 +204,9 @@ static void __do_fork(void *aux) {
 	struct intr_frame if_;
 	struct thread *parent = fork_arg->parent;
 	struct thread *current = thread_current();
+	struct process *parent_process = (struct process *)parent;
+	struct process *current_process = (struct process *)current;
+
 	/* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
 	struct intr_frame *parent_if = &fork_arg->if_;
 	bool succ = true;
@@ -234,8 +237,6 @@ static void __do_fork(void *aux) {
 	 * TODO:       the resources of parent.*/
 
 	process_init();
-	struct process *parent_process = (struct process *)parent;
-	struct process *current_process = (struct process *)current;
 
 	memcpy(current_process->fd_list, parent_process->fd_list, PGSIZE);
 	for (int fd = 0; fd < FDSIZE; ++fd) {
@@ -262,6 +263,7 @@ static void __do_fork(void *aux) {
 	}
 error:
 	fork_arg->fork_result = TID_ERROR;
+	sema_up(&current_process->parent_waited);
 	sema_up(&fork_arg->fork_done);
 	thread_exit();
 }
