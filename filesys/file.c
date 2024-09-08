@@ -45,7 +45,7 @@ struct file *file_reopen(struct file *file) {
 /* Duplicate the file object including attributes and returns a new file for the
  * same inode as FILE. Returns a null pointer if unsuccessful. */
 struct file *file_duplicate(struct file *file) {
-	if (file == &_stdin || file == &_stdout) {
+	if (file == stdin || file == stdout) {
 		return file;
 	}
 	struct file *nfile = file_open(inode_reopen(file->inode));
@@ -60,11 +60,14 @@ struct file *file_duplicate(struct file *file) {
 /* Closes FILE. */
 void file_close(struct file *file) {
 	if (file != NULL) {
-		file_allow_write(file);
-		inode_close(file->inode);
 		file->open_cnt--;
-		if (file->open_cnt == 0)
+		if (file->open_cnt == 0) {
+			file_allow_write(file);
+			inode_close(file->inode);
 			free(file);
+		} else {
+			inode_close(file->inode);
+		}
 	}
 }
 
@@ -165,14 +168,11 @@ struct file *file_plus_open_cnt(struct file *file) {
 	if (!file) {
 		return NULL;
 	}
-	if (file == &_stdin || file == &_stdout) {
+	if (file == stdin || file == stdout) {
 		return file;
 	}
 	if (!inode_reopen(file->inode))
 		return NULL;
 	file->open_cnt++;
-	if (file->deny_write) {
-		file_deny_write(file);
-	}
 	return file;
 }

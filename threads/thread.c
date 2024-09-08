@@ -307,16 +307,14 @@ void thread_yield(void) {
 	struct thread *curr = thread_current();
 	enum intr_level old_level;
 
-	if (intr_context()) {
-		intr_yield_on_return();
-	} else {
-		old_level = intr_disable();
-		if (curr != idle_thread)
-			list_insert_ordered(&ready_list, &curr->status_elem,
-								sort_by_priority_descending, NULL);
-		do_schedule(THREAD_READY);
-		intr_set_level(old_level);
-	}
+	ASSERT(!intr_context());
+
+	old_level = intr_disable();
+	if (curr != idle_thread)
+		list_insert_ordered(&ready_list, &curr->status_elem,
+							sort_by_priority_descending, NULL);
+	do_schedule(THREAD_READY);
+	intr_set_level(old_level);
 }
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
@@ -337,6 +335,7 @@ void thread_set_priority(int new_priority) {
 }
 
 /* Returns the current thread's priority. */
+/* This function is safty but slower than thread_priority_of */
 int thread_get_priority(void) {
 	enum intr_level old_level = intr_disable();
 	int priority = thread_priority_of(thread_current());
@@ -391,7 +390,10 @@ static void idle(void *idle_started_ UNUSED) {
 
 		   See [IA32-v2a] "HLT", [IA32-v2b] "STI", and [IA32-v3a]
 		   7.11.1 "HLT Instruction". */
-		asm volatile("sti; hlt" : : : "memory");
+		asm volatile("sti; hlt"
+					 :
+					 :
+					 : "memory");
 	}
 }
 

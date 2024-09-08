@@ -22,13 +22,13 @@
 #include "vm/vm.h"
 #endif
 #include "userprog/fd.h"
-#include "threads/pte.h"
 
 static void process_cleanup(void);
 static bool load(const char *file_name, struct intr_frame *if_);
 static void initd(void *f_name);
 static void __do_fork(void *);
 
+/* Struct for give argument to __do_fork */
 static struct process_fork_arg {
 	struct intr_frame if_;
 	struct thread *parent;
@@ -49,9 +49,7 @@ static void process_init(void) {
 
 	// Free fd list except initial_thread
 	if (current->fd_list) {
-		for (int fd = 0; fd < FDSIZE; ++fd) {
-			fd_close(fd);
-		}
+		fd_close_all(current->fd_list);
 	} else {
 		current->fd_list = palloc_get_page(PAL_ZERO);
 	}
@@ -68,7 +66,10 @@ void process_init_in_thread_init(struct process *new) {
 	lock_init(&new->data_access_lock);
 
 	list_init(&new->child_list);
+
+	lock_acquire(&current->data_access_lock);
 	list_push_back(&current->child_list, &new->child_elem);
+	lock_release(&current->data_access_lock);
 
 	return;
 }
@@ -143,7 +144,7 @@ tid_t process_fork(const char *name, struct intr_frame *if_) {
 	/* Clone current thread to new thread.*/
 	struct process_fork_arg fork_arg;
 	memcpy(&fork_arg.if_, if_, sizeof(struct intr_frame));
-	fork_arg.parent = thread_current();
+	fork_arg.parent = process_current();
 	sema_init(&fork_arg.fork_done, 0);
 
 	int tid = thread_create(name, PRI_DEFAULT, __do_fork, &fork_arg);
@@ -202,10 +203,10 @@ static bool duplicate_pte(uint64_t *pte, void *va, void *aux) {
 static void __do_fork(void *aux) {
 	struct process_fork_arg *fork_arg = (struct process_fork_arg *)aux;
 	struct intr_frame if_;
-	struct thread *parent = fork_arg->parent;
-	struct thread *current = thread_current();
-	struct process *parent_process = (struct process *)parent;
-	struct process *current_process = (struct process *)current;
+	struct thread *parent_thread = fork_arg->parent;
+	struct thread *current_thread = thread_current();
+	struct process *parent_process = (struct process *)parent_thread;
+	struct process *current_process = (struct process *)current_thread;
 
 	/* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
 	struct intr_frame *parent_if = &fork_arg->if_;
@@ -216,17 +217,17 @@ static void __do_fork(void *aux) {
 	if_.R.rax = 0;
 
 	/* 2. Duplicate PT */
-	current->pml4 = pml4_create();
-	if (current->pml4 == NULL)
+	current_thread->pml4 = pml4_create();
+	if (current_thread->pml4 == NULL)
 		goto error;
 
-	process_activate(current);
+	process_activate(current_thread);
 #ifdef VM
-	supplemental_page_table_init(&current->spt);
-	if (!supplemental_page_table_copy(&current->spt, &parent->spt))
+	supplemental_page_table_init(&current_thread->spt);
+	if (!supplemental_page_table_copy(&current_thread->spt, &parent_thread->spt))
 		goto error;
 #else
-	if (!pml4_for_each(parent->pml4, duplicate_pte, parent))
+	if (!pml4_for_each(parent_thread->pml4, duplicate_pte, parent_thread))
 		goto error;
 #endif
 
@@ -240,16 +241,8 @@ static void __do_fork(void *aux) {
 	if (!current_process->fd_list) {
 		goto error;
 	}
-
-	struct file *parent_file;
-	for (int fd = 0; fd < FDSIZE; ++fd) {
-		parent_file = (*parent_process->fd_list)[fd];
-		if (parent_file) {
-			(*current_process->fd_list)[fd] = file_duplicate(parent_file);
-			if (!(*current_process->fd_list)[fd]) {
-				goto error;
-			}
-		}
+	if (!fd_dup_fd_list(*current_process->fd_list, *parent_process->fd_list)) {
+		goto error;
 	}
 	if (parent_process->loaded_file) {
 		current_process->loaded_file = file_reopen(parent_process->loaded_file);
@@ -261,14 +254,17 @@ static void __do_fork(void *aux) {
 
 	/* Finally, switch to the newly created process. */
 	if (succ) {
-		fork_arg->fork_result = current->tid;
+		fork_arg->fork_result = current_thread->tid;
 		sema_up(&fork_arg->fork_done);
 		do_iret(&if_);
 	}
 error:
 	fork_arg->fork_result = TID_ERROR;
 	sema_up(&current_process->parent_waited);
+
+	lock_acquire(&parent_process->data_access_lock);
 	list_remove(&current_process->child_elem);
+	lock_release(&parent_process->data_access_lock);
 
 	sema_up(&fork_arg->fork_done);
 	thread_exit();
@@ -324,6 +320,7 @@ int process_wait(tid_t child_tid) {
 
 	current = process_current();
 	child = NULL;
+	lock_acquire(&current->data_access_lock);
 	for (child_elem = list_begin(&current->child_list);
 		 child_elem != list_end(&current->child_list);
 		 child_elem = list_next(child_elem)) {
@@ -334,6 +331,7 @@ int process_wait(tid_t child_tid) {
 			break;
 		}
 	}
+	lock_release(&current->data_access_lock);
 	if (!child) {
 		return -1;
 	}
@@ -354,13 +352,9 @@ void process_exit(void) {
 	sema_up(&curr->exist_status_setted);
 
 	if (curr->fd_list) {
-		for (int fd = 0; fd < FDSIZE; ++fd) {
-			fd_close(fd);
-		}
+		fd_close_all(curr->fd_list);
 		palloc_free_page(curr->fd_list);
 	}
-	// process_init();
-	// palloc_free_page(curr->fd_list);
 	process_cleanup();
 
 	sema_down(&curr->parent_waited);
