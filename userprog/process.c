@@ -244,9 +244,7 @@ static void __do_fork(void *aux) {
 	struct file *parent_file;
 	for (int fd = 0; fd < FDSIZE; ++fd) {
 		parent_file = (*parent_process->fd_list)[fd];
-		if (parent_file == stdin || parent_file == stdout) {
-			(*current_process->fd_list)[fd] = parent_file;
-		} else if (parent_file) {
+		if (parent_file) {
 			(*current_process->fd_list)[fd] = file_duplicate(parent_file);
 			if (!(*current_process->fd_list)[fd]) {
 				goto error;
@@ -254,7 +252,7 @@ static void __do_fork(void *aux) {
 		}
 	}
 	if (parent_process->loaded_file) {
-		current_process->loaded_file = file_duplicate(parent_process->loaded_file);
+		current_process->loaded_file = file_reopen(parent_process->loaded_file);
 		if (!current_process->loaded_file) {
 			goto error;
 		}
