@@ -264,6 +264,8 @@ static void __do_fork(void *aux) {
 error:
 	fork_arg->fork_result = TID_ERROR;
 	sema_up(&current_process->parent_waited);
+	list_remove(&current_process->child_elem);
+
 	sema_up(&fork_arg->fork_done);
 	thread_exit();
 }
