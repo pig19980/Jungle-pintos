@@ -45,7 +45,7 @@ struct file *file_reopen(struct file *file) {
 /* Duplicate the file object including attributes and returns a new file for the
  * same inode as FILE. Returns a null pointer if unsuccessful. */
 struct file *file_duplicate(struct file *file) {
-	if (file == &_stdin || file == &_stdout) {
+	if (file == stdin || file == stdout) {
 		return file;
 	}
 	struct file *nfile = file_open(inode_reopen(file->inode));
@@ -165,7 +165,7 @@ struct file *file_plus_open_cnt(struct file *file) {
 	if (!file) {
 		return NULL;
 	}
-	if (file == &_stdin || file == &_stdout) {
+	if (file == stdin || file == stdout) {
 		return file;
 	}
 	if (!inode_reopen(file->inode))
