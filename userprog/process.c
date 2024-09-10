@@ -30,7 +30,7 @@ static void __do_fork(void *);
 
 /* Struct for give argument to __do_fork */
 static struct process_fork_arg {
-	struct intr_frame if_;
+	struct intr_frame *if_;
 	struct thread *parent;
 	struct semaphore fork_done;
 	int fork_result;
@@ -143,7 +143,7 @@ static void initd(void *f_name) {
 tid_t process_fork(const char *name, struct intr_frame *if_) {
 	/* Clone current thread to new thread.*/
 	struct process_fork_arg fork_arg;
-	memcpy(&fork_arg.if_, if_, sizeof(struct intr_frame));
+	fork_arg.if_ = if_;
 	fork_arg.parent = process_current();
 	sema_init(&fork_arg.fork_done, 0);
 
@@ -209,7 +209,7 @@ static void __do_fork(void *aux) {
 	struct process *current_process = (struct process *)current_thread;
 
 	/* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
-	struct intr_frame *parent_if = &fork_arg->if_;
+	struct intr_frame *parent_if = fork_arg->if_;
 	bool succ = true;
 
 	/* 1. Read the cpu context to local stack. */
