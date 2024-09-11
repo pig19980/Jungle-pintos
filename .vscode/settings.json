@@ -1,21 +1,11 @@
 {
-    "files.associations": {
-        "*.h": "c",
-        "*.inc": "c",
-        "*.tcc": "c",
-        "fstream": "c",
-        "cstdarg": "c",
-        "cmath": "c",
-        "thread": "c",
-        "array": "c",
-        "string_view": "c",
-        "initializer_list": "c",
-        "utility": "c"
-    },
     "[c]": {
         "editor.defaultFormatter": "xaver.clang-format",
         "editor.formatOnSave": true
     },
-    "clang-format.executable": "/usr/bin/clang-format",
     "C_Cpp.clang_format_style": "file:{$workspaceFolder}/.clang-format",
+    "clang-format.assumeFilename": "{$workspaceFolder}/.clang-format",
+    "clang-format.language.c.style": "file",
+    "clang-format.language.cpp.style": "file",
+    "C_Cpp.autoAddFileAssociations": false,
 }
