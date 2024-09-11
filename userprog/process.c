@@ -53,6 +53,7 @@ static void process_init(void) {
 	} else {
 		current->fd_list = palloc_get_page(PAL_ZERO);
 	}
+	current->is_process = true;
 }
 
 /* Init new process. Called in thread_init. */
@@ -337,7 +338,6 @@ int process_wait(tid_t child_tid) {
 	}
 	sema_down(&child->exist_status_setted);
 	exist_status = child->exist_status;
-	printf("%s: exit(%d)\n", child->thread.name, child->exist_status);
 	sema_up(&child->parent_waited);
 	return exist_status;
 }
@@ -349,15 +349,19 @@ void process_exit(void) {
 	 * TODO: Implement process termination message (see
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
-	sema_up(&curr->exist_status_setted);
 
-	if (curr->fd_list) {
+	/* Check this thread did process_init() */
+	if (curr->is_process) {
+		printf("%s: exit(%d)\n", curr->thread.name, curr->exist_status);
+		sema_up(&curr->exist_status_setted);
+
 		fd_close_all(curr->fd_list);
 		palloc_free_page(curr->fd_list);
 	}
 	process_cleanup();
-
-	sema_down(&curr->parent_waited);
+	if (curr->is_process) {
+		sema_down(&curr->parent_waited);
+	}
 }
 
 /* Free the current process's resources. */

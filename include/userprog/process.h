@@ -14,6 +14,7 @@ struct process {
 	struct thread thread;
 	struct file *(*fd_list)[FDSIZE];
 	int exist_status;
+	bool is_process;
 	struct list child_list;
 	struct list_elem child_elem;
 	/* Sema up when parent process wait this process */
