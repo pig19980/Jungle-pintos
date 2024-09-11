@@ -9,7 +9,7 @@
 #include "../debug.h"
 #include "threads/malloc.h"
 
-#define list_elem_to_hash_elem(LIST_ELEM)                                      \
+#define list_elem_to_hash_elem(LIST_ELEM) \
 	list_entry(LIST_ELEM, struct hash_elem, list_elem)
 
 static struct list *find_bucket(struct hash *, struct hash_elem *);
