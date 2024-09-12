@@ -1,6 +1,9 @@
+---
 BasedOnStyle: LLVM
 UseTab: Always
 IndentWidth: 4
 TabWidth: 4
 IncludeBlocks: Preserve
 SortIncludes: false
+ColumnLimit: 0
+...

@@ -27,9 +27,6 @@ typedef int tid_t;
 #define PRI_DEFAULT 31 /* Default priority. */
 #define PRI_MAX 63	 /* Highest priority. */
 
-/* Max depth of nesting semaphore */
-#define NESTING_DEPTH 8
-
 /* Macro for 4BSD Scheduler */
 typedef int32_t myfloat;
 #define DEFAULT_NICE 0 /* Default nice. */

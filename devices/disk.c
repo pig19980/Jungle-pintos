@@ -68,8 +68,8 @@ struct channel {
 	uint16_t reg_base; /* Base I/O port. */
 	uint8_t irq;	   /* Interrupt in use. */
 
-	struct lock lock;		  /* Must acquire to access the controller. */
-	bool expecting_interrupt; /* True if an interrupt is expected, false if
+	struct lock lock;				  /* Must acquire to access the controller. */
+	bool expecting_interrupt;		  /* True if an interrupt is expected, false if
 								 any interrupt would be spurious. */
 	struct semaphore completion_wait; /* Up'd by interrupt handler. */
 

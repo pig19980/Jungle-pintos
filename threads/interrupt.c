@@ -56,24 +56,24 @@ static struct gate idt[INTR_CNT];
 static struct desc_ptr idt_desc = {.size = sizeof(idt) - 1,
 								   .address = (uint64_t)idt};
 
-#define make_gate(g, function, d, t)                                           \
-	{                                                                          \
-		ASSERT((function) != NULL);                                            \
-		ASSERT((d) >= 0 && (d) <= 3);                                          \
-		ASSERT((t) >= 0 && (t) <= 15);                                         \
-		*(g) = (struct gate){                                                  \
-			.off_15_0 = (uint64_t)(function)&0xffff,                           \
-			.ss = SEL_KCSEG,                                                   \
-			.ist = 0,                                                          \
-			.rsv1 = 0,                                                         \
-			.type = (t),                                                       \
-			.s = 0,                                                            \
-			.dpl = (d),                                                        \
-			.p = 1,                                                            \
-			.off_31_16 = ((uint64_t)(function) >> 16) & 0xffff,                \
-			.off_32_63 = ((uint64_t)(function) >> 32) & 0xffffffff,            \
-			.rsv2 = 0,                                                         \
-		};                                                                     \
+#define make_gate(g, function, d, t)                                \
+	{                                                               \
+		ASSERT((function) != NULL);                                 \
+		ASSERT((d) >= 0 && (d) <= 3);                               \
+		ASSERT((t) >= 0 && (t) <= 15);                              \
+		*(g) = (struct gate){                                       \
+			.off_15_0 = (uint64_t)(function)&0xffff,                \
+			.ss = SEL_KCSEG,                                        \
+			.ist = 0,                                               \
+			.rsv1 = 0,                                              \
+			.type = (t),                                            \
+			.s = 0,                                                 \
+			.dpl = (d),                                             \
+			.p = 1,                                                 \
+			.off_31_16 = ((uint64_t)(function) >> 16) & 0xffff,     \
+			.off_32_63 = ((uint64_t)(function) >> 32) & 0xffffffff, \
+			.rsv2 = 0,                                              \
+		};                                                          \
 	}
 
 /* Creates an interrupt gate that invokes FUNCTION with the given DPL. */
@@ -113,7 +113,8 @@ enum intr_level intr_get_level(void) {
 	   value off the stack into `flags'.  See [IA32-v2b] "PUSHF"
 	   and "POP" and [IA32-v3a] 5.8.1 "Masking Maskable Hardware
 	   Interrupts". */
-	asm volatile("pushfq; popq %0" : "=g"(flags));
+	asm volatile("pushfq; popq %0"
+				 : "=g"(flags));
 
 	return flags & FLAG_IF ? INTR_ON : INTR_OFF;
 }
@@ -145,7 +146,10 @@ enum intr_level intr_disable(void) {
 	/* Disable interrupts by clearing the interrupt flag.
 	   See [IA32-v2b] "CLI" and [IA32-v3a] 5.8.1 "Masking Maskable
 	   Hardware Interrupts". */
-	asm volatile("cli" : : : "memory");
+	asm volatile("cli"
+				 :
+				 :
+				 : "memory");
 
 	return old_level;
 }

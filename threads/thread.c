@@ -320,12 +320,14 @@ void thread_yield(void) {
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void thread_set_priority(int new_priority) {
 	enum intr_level old_level;
+	int cur_priority;
 
 	thread_current()->priority = new_priority;
 	thread_reset_real_priority();
 	old_level = intr_disable();
+	cur_priority = thread_priority_of(thread_current());
 	if (!list_empty(&ready_list) &&
-		thread_get_priority() <
+		cur_priority <
 			thread_priority_of(ptr_thread(list_front(&ready_list)))) {
 		thread_yield();
 	}
@@ -333,7 +335,14 @@ void thread_set_priority(int new_priority) {
 }
 
 /* Returns the current thread's priority. */
-int thread_get_priority(void) { return thread_priority_of(thread_current()); }
+/* This function is safty but slower than thread_priority_of */
+int thread_get_priority(void) {
+	enum intr_level old_level = intr_disable();
+	int priority = thread_priority_of(thread_current());
+	intr_set_level(old_level);
+	barrier();
+	return priority;
+}
 
 /* Sets the current thread's nice value to NICE. */
 void thread_set_nice(int nice) { thread_current()->nice = nice; }
@@ -381,7 +390,10 @@ static void idle(void *idle_started_ UNUSED) {
 
 		   See [IA32-v2a] "HLT", [IA32-v2b] "STI", and [IA32-v3a]
 		   7.11.1 "HLT Instruction". */
-		asm volatile("sti; hlt" : : : "memory");
+		asm volatile("sti; hlt"
+					 :
+					 :
+					 : "memory");
 	}
 }
 
@@ -415,6 +427,12 @@ static void init_thread(struct thread *t, const char *name, int priority) {
 	if (thread_mlfqs) {
 		t->priority = PRI_MAX;
 	}
+
+#ifdef USERPROG
+	if (t != initial_thread) {
+		process_init_in_thread_init((struct process *)t);
+	}
+#endif
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should

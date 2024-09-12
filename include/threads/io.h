@@ -48,7 +48,9 @@
 static inline uint8_t inb(uint16_t port) {
 	/* See [IA32-v2a] "IN". */
 	uint8_t data;
-	asm volatile("inb %w1,%0" : "=a"(data) : "d"(port));
+	asm volatile("inb %w1,%0"
+				 : "=a"(data)
+				 : "d"(port));
 	return data;
 }
 
@@ -66,7 +68,9 @@ static inline void insb(uint16_t port, void *addr, size_t cnt) {
 static inline uint16_t inw(uint16_t port) {
 	uint16_t data;
 	/* See [IA32-v2a] "IN". */
-	asm volatile("inw %w1,%0" : "=a"(data) : "d"(port));
+	asm volatile("inw %w1,%0"
+				 : "=a"(data)
+				 : "d"(port));
 	return data;
 }
 
@@ -84,7 +88,9 @@ static inline void insw(uint16_t port, void *addr, size_t cnt) {
 static inline uint32_t inl(uint16_t port) {
 	/* See [IA32-v2a] "IN". */
 	uint32_t data;
-	asm volatile("inl %w1,%0" : "=a"(data) : "d"(port));
+	asm volatile("inl %w1,%0"
+				 : "=a"(data)
+				 : "d"(port));
 	return data;
 }
 
@@ -101,7 +107,9 @@ static inline void insl(uint16_t port, void *addr, size_t cnt) {
 /* Writes byte DATA to PORT. */
 static inline void outb(uint16_t port, uint8_t data) {
 	/* See [IA32-v2b] "OUT". */
-	asm volatile("outb %0,%w1" : : "a"(data), "d"(port));
+	asm volatile("outb %0,%w1"
+				 :
+				 : "a"(data), "d"(port));
 }
 
 /* Writes to PORT each byte of data in the CNT-byte buffer
@@ -117,7 +125,9 @@ static inline void outsb(uint16_t port, const void *addr, size_t cnt) {
 /* Writes the 16-bit DATA to PORT. */
 static inline void outw(uint16_t port, uint16_t data) {
 	/* See [IA32-v2b] "OUT". */
-	asm volatile("outw %0,%w1" : : "a"(data), "d"(port));
+	asm volatile("outw %0,%w1"
+				 :
+				 : "a"(data), "d"(port));
 }
 
 /* Writes to PORT each 16-bit unit (halfword) of data in the
@@ -133,7 +143,9 @@ static inline void outsw(uint16_t port, const void *addr, size_t cnt) {
 /* Writes the 32-bit DATA to PORT. */
 static inline void outl(uint16_t port, uint32_t data) {
 	/* See [IA32-v2b] "OUT". */
-	asm volatile("outl %0,%w1" : : "a"(data), "d"(port));
+	asm volatile("outl %0,%w1"
+				 :
+				 : "a"(data), "d"(port));
 }
 
 /* Writes to PORT each 32-bit unit (word) of data in the CNT-word

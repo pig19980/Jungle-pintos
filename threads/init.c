@@ -88,6 +88,7 @@ int main(void) {
 #ifdef USERPROG
 	tss_init();
 	gdt_init();
+	process_init_of_initial_thread();
 #endif
 
 	/* Initialize interrupt handlers. */
@@ -259,8 +260,11 @@ static void run_actions(char **argv) {
 	static const struct action actions[] = {
 		{"run", 2, run_task},
 #ifdef FILESYS
-		{"ls", 1, fsutil_ls},   {"cat", 2, fsutil_cat}, {"rm", 2, fsutil_rm},
-		{"put", 2, fsutil_put}, {"get", 2, fsutil_get},
+		{"ls", 1, fsutil_ls},
+		{"cat", 2, fsutil_cat},
+		{"rm", 2, fsutil_rm},
+		{"put", 2, fsutil_put},
+		{"get", 2, fsutil_get},
 #endif
 		{NULL, 0, NULL},
 	};

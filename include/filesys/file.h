@@ -27,4 +27,14 @@ void file_seek(struct file *, off_t);
 off_t file_tell(struct file *);
 off_t file_length(struct file *);
 
+/* For dup2 */
+struct file *file_plus_open_cnt(struct file *);
+
+/* Define file for console I/O */
+extern struct file _stdin;
+extern struct file _stdout;
+
+#define stdin (&_stdin)   /* Standard input stream.  */
+#define stdout (&_stdout) /* Standard output stream.  */
+
 #endif /* filesys/file.h */

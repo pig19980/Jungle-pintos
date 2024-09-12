@@ -10,7 +10,7 @@
 
 #define PAGE_SIZE 4096
 #define PAGE_SHIFT 12
-#define PAGE_ALIGN_CEIL(x)                                                     \
+#define PAGE_ALIGN_CEIL(x) \
 	((x % PAGE_SIZE ? (x + PAGE_SIZE) : x) >> PAGE_SHIFT << PAGE_SHIFT)
 
 void test_main(void) {
