@@ -21,8 +21,8 @@ struct process {
 	struct semaphore parent_waited;
 	/* Sema up when this process set exist status */
 	struct semaphore exist_status_setted;
-	/* Lock for accessing data of this process by other process*/
-	struct lock data_access_lock;
+	/* Lock for accessing child list of this process by other process*/
+	struct lock child_access_lock;
 	struct file *loaded_file; /* Opened file by this process */
 	unsigned magic;			  /* Detects stack overflow. */
 };
