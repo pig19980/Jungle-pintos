@@ -3,11 +3,15 @@
 #include "threads/malloc.h"
 #include "vm/vm.h"
 #include "vm/inspect.h"
+#include "threads/synch.h"
+#include <string.h>
+#include "threads/mmu.h"
 
 static struct hash frame_hash;
 static uint64_t frame_hash_func(const struct hash_elem *, void *);
 static bool frame_less_func(const struct hash_elem *,
 							const struct hash_elem *, void *);
+static struct lock frame_lock;
 
 uint64_t frame_hash_func(const struct hash_elem *e, void *aux) {
 	return hash_bytes(&(hash_entry(e, struct frame, frame_elem)->kva),
@@ -34,6 +38,7 @@ void vm_init(void) {
 	if (!hash_init(&frame_hash, frame_hash_func, frame_less_func, NULL)) {
 		PANIC("frame hash init fail");
 	}
+	lock_init(&frame_lock);
 }
 
 /* Get the type of the page. This function is useful if you want to know the
@@ -102,8 +107,42 @@ void spt_remove_page(struct supplemental_page_table *spt, struct page *page) {
 
 /* Get the struct frame, that will be evicted. */
 static struct frame *vm_get_victim(void) {
-	struct frame *victim = NULL;
+	struct frame *victim;
 	/* TODO: The policy for eviction is up to you. */
+	static struct hash_iterator before_i;
+	struct hash_iterator current_i;
+	struct page *page;
+	uint64_t *pte;
+
+	lock_acquire(&frame_lock);
+	ASSERT(!hash_empty(&frame_hash));
+	if (!hash_cur(&before_i)) {
+		hash_first(&before_i, &frame_hash);
+	}
+	memcpy(&current_i, &before_i, sizeof(struct hash_iterator));
+	do {
+		hash_next(&current_i);
+		if (!hash_cur(&current_i)) {
+			hash_first(&current_i, &frame_hash);
+		}
+		victim = hash_entry(hash_cur(&current_i), struct frame, frame_elem);
+		page = victim->page;
+		// I don't know this is right
+		if (!page) {
+			continue;
+		}
+		//////////
+		pte = pml4e_walk(page->process->thread.pml4, (uint64_t)page->va, 0);
+		ASSERT(pte);
+		if (*pte & PTE_A) {
+			*pte &= ~(uint64_t)PTE_A;
+		} else {
+			break;
+		}
+	} while (hash_cur(&current_i) != hash_cur(&before_i));
+
+	memcpy(&before_i, &current_i, sizeof(struct hash_iterator));
+	lock_release(&frame_lock);
 
 	return victim;
 }
@@ -111,10 +150,14 @@ static struct frame *vm_get_victim(void) {
 /* Evict one page and return the corresponding frame.
  * Return NULL on error.*/
 static struct frame *vm_evict_frame(void) {
-	struct frame *victim UNUSED = vm_get_victim();
+	struct frame *victim = vm_get_victim();
 	/* TODO: swap out the victim and return the evicted frame. */
+	ASSERT(victim != NULL);
+	bool swap_ret = swap_out(victim->page);
+	ASSERT(swap_ret == true);
+	victim->page = NULL;
 
-	return NULL;
+	return victim;
 }
 
 /* palloc() and get frame. If there is no available page, evict the page
@@ -122,8 +165,24 @@ static struct frame *vm_evict_frame(void) {
  * memory is full, this function evicts the frame to get the available memory
  * space.*/
 static struct frame *vm_get_frame(void) {
-	struct frame *frame = NULL;
+	struct frame *frame;
+	struct page *page;
+	void *kva;
+	struct hash_elem *old_frame_elem;
 	/* TODO: Fill this function. */
+
+	kva = palloc_get_page(PAL_USER);
+	if (kva) {
+		frame = malloc(sizeof(struct frame));
+		ASSERT(frame != NULL);
+		frame->kva = kva;
+		frame->page = NULL;
+		lock_acquire(&frame_lock);
+		old_frame_elem = hash_insert(&frame_hash, &frame->frame_elem);
+		lock_release(&frame_lock);
+	} else {
+		frame = vm_evict_frame();
+	}
 
 	ASSERT(frame != NULL);
 	ASSERT(frame->page == NULL);
