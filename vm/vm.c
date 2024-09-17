@@ -99,21 +99,19 @@ err:
 }
 
 /* Find VA from spt and return page. On error, return NULL. */
-struct page *spt_find_page(struct supplemental_page_table *spt UNUSED,
-						   void *va UNUSED) {
-	struct page *page = NULL;
-	/* TODO: Fill this function. */
-
+struct page *spt_find_page(struct supplemental_page_table *spt,
+						   void *va) {
+	struct page key_page = {.va = va};
+	struct page *page = hash_find(&spt->spt_hash, &key_page.spt_elem);
 	return page;
 }
 
 /* Insert PAGE into spt with validation. */
-bool spt_insert_page(struct supplemental_page_table *spt UNUSED,
-					 struct page *page UNUSED) {
-	int succ = false;
-	/* TODO: Fill this function. */
-
-	return succ;
+/* If page is allocated, no reason to fail when inserting in hash */
+bool spt_insert_page(struct supplemental_page_table *spt,
+					 struct page *page) {
+	hash_insert(spt, &page->spt_elem);
+	return true;
 }
 
 void spt_remove_page(struct supplemental_page_table *spt, struct page *page) {
