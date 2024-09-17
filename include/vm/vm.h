@@ -2,6 +2,7 @@
 #define VM_VM_H
 #include <stdbool.h>
 #include "threads/palloc.h"
+#include <hash.h>
 
 enum vm_type {
 	/* page not initialized */
@@ -63,6 +64,7 @@ struct page {
 struct frame {
 	void *kva;
 	struct page *page;
+	struct hash_elem frame_elem;
 };
 
 /* The function table for page operations.

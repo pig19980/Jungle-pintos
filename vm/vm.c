@@ -4,6 +4,22 @@
 #include "vm/vm.h"
 #include "vm/inspect.h"
 
+static struct hash frame_hash;
+static uint64_t frame_hash_func(const struct hash_elem *, void *);
+static bool frame_less_func(const struct hash_elem *,
+							const struct hash_elem *, void *);
+
+uint64_t frame_hash_func(const struct hash_elem *e, void *aux) {
+	return hash_bytes(&(hash_entry(e, struct frame, frame_elem)->kva),
+					  sizeof(void *));
+}
+
+bool frame_less_func(const struct hash_elem *a,
+					 const struct hash_elem *b, void *aux) {
+	return hash_entry(a, struct frame, frame_elem)->kva <
+		   hash_entry(b, struct frame, frame_elem)->kva;
+}
+
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
 void vm_init(void) {
@@ -15,6 +31,9 @@ void vm_init(void) {
 	register_inspect_intr();
 	/* DO NOT MODIFY UPPER LINES. */
 	/* TODO: Your code goes here. */
+	if (!hash_init(&frame_hash, frame_hash_func, frame_less_func, NULL)) {
+		PANIC("frame hash init fail");
+	}
 }
 
 /* Get the type of the page. This function is useful if you want to know the
