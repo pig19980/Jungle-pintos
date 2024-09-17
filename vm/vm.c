@@ -6,6 +6,7 @@
 #include "threads/synch.h"
 #include <string.h>
 #include "threads/mmu.h"
+#include "userprog/process.h"
 
 static struct hash frame_hash;
 static uint64_t frame_hash_func(const struct hash_elem *, void *);

@@ -3,7 +3,8 @@
 #include <stdbool.h>
 #include "threads/palloc.h"
 #include <hash.h>
-#include "userprog/process.h"
+
+struct process;
 
 enum vm_type {
 	/* page not initialized */
