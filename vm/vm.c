@@ -13,15 +13,30 @@ static bool frame_less_func(const struct hash_elem *,
 							const struct hash_elem *, void *);
 static struct lock frame_lock;
 
+static uint64_t spt_hash_func(const struct hash_elem *, void *);
+static bool spt_less_func(const struct hash_elem *,
+						  const struct hash_elem *, void *);
+
 uint64_t frame_hash_func(const struct hash_elem *e, void *aux) {
-	return hash_bytes(&(hash_entry(e, struct frame, frame_elem)->kva),
+	return hash_bytes(&(hash_entry(e, struct frame, ft_elem)->kva),
 					  sizeof(void *));
 }
 
 bool frame_less_func(const struct hash_elem *a,
-					 const struct hash_elem *b, void *aux) {
-	return hash_entry(a, struct frame, frame_elem)->kva <
-		   hash_entry(b, struct frame, frame_elem)->kva;
+					 const struct hash_elem *b, void *aux UNUSED) {
+	return hash_entry(a, struct frame, ft_elem)->kva <
+		   hash_entry(b, struct frame, ft_elem)->kva;
+}
+
+uint64_t spt_hash_func(const struct hash_elem *e, void *aux) {
+	return hash_bytes(&(hash_entry(e, struct page, spt_elem)->va),
+					  sizeof(void *));
+}
+
+bool spt_less_func(const struct hash_elem *a,
+				   const struct hash_elem *b, void *aux UNUSED) {
+	return hash_entry(a, struct page, spt_elem)->va <
+		   hash_entry(b, struct page, spt_elem)->va;
 }
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
@@ -125,7 +140,7 @@ static struct frame *vm_get_victim(void) {
 		if (!hash_cur(&current_i)) {
 			hash_first(&current_i, &frame_hash);
 		}
-		victim = hash_entry(hash_cur(&current_i), struct frame, frame_elem);
+		victim = hash_entry(hash_cur(&current_i), struct frame, ft_elem);
 		page = victim->page;
 		// I don't know this is right
 		if (!page) {
@@ -178,7 +193,7 @@ static struct frame *vm_get_frame(void) {
 		frame->kva = kva;
 		frame->page = NULL;
 		lock_acquire(&frame_lock);
-		old_frame_elem = hash_insert(&frame_hash, &frame->frame_elem);
+		old_frame_elem = hash_insert(&frame_hash, &frame->ft_elem);
 		lock_release(&frame_lock);
 	} else {
 		frame = vm_evict_frame();
@@ -236,7 +251,11 @@ static bool vm_do_claim_page(struct page *page) {
 }
 
 /* Initialize new supplemental page table */
-void supplemental_page_table_init(struct supplemental_page_table *spt UNUSED) {}
+void supplemental_page_table_init(struct supplemental_page_table *spt UNUSED) {
+	if (!hash_init(&spt->spt_hash, spt_hash_func, spt_less_func, NULL)) {
+		PANIC("spt hash init fail");
+	}
+}
 
 /* Copy supplemental page table from src to dst */
 bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
