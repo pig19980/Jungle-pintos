@@ -36,6 +36,8 @@ int process_wait(tid_t);
 void process_exit(void);
 void process_activate(struct thread *next);
 
+void exit_with_exit_status(int);
+
 struct process *process_current(void);
 
 #endif /* userprog/process.h */

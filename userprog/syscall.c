@@ -45,8 +45,7 @@ void syscall_init(void) {
 void syscall_check_vaddr(uint64_t va, struct process *curr) {
 	int temp;
 	if (!is_user_vaddr(va)) {
-		curr->exist_status = -1;
-		thread_exit();
+		exit_with_exit_status(-1);
 	}
 	temp = *(int *)va;
 	return;
@@ -69,8 +68,7 @@ void syscall_handler(struct intr_frame *f) {
 		NOT_REACHED();
 		break;
 	case SYS_EXIT:
-		current->exist_status = f->R.rdi;
-		thread_exit();
+		exit_with_exit_status(f->R.rdi);
 		NOT_REACHED();
 		break;
 	case SYS_FORK:
@@ -83,13 +81,12 @@ void syscall_handler(struct intr_frame *f) {
 		char *fn_copy, *temp_ptr;
 		fn_copy = palloc_get_page(0);
 		if (fn_copy == NULL) {
-			current->exist_status = -1;
-			thread_exit();
+			exit_with_exit_status(-1);
 		}
 		strlcpy(fn_copy, f->R.rdi, PGSIZE);
 
-		current->exist_status = process_exec(fn_copy);
-		thread_exit();
+		exit_with_exit_status(process_exec(fn_copy));
+		NOT_REACHED();
 		break;
 	case SYS_WAIT:
 		f->R.rax = process_wait(f->R.rdi);
@@ -145,6 +142,6 @@ void syscall_handler(struct intr_frame *f) {
 	case SYS_UMOUNT:
 	default:
 		printf("system call %lld not maid\n", f->R.rax);
-		thread_exit();
+		exit_with_exit_status(-1);
 	}
 }

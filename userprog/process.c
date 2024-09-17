@@ -833,3 +833,11 @@ struct process *process_current(void) {
 
 	return p;
 }
+
+void exit_with_exit_status(int status) {
+	struct process *curr;
+	curr = process_current();
+	curr->exist_status = status;
+	thread_exit();
+	NOT_REACHED();
+}
