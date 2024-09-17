@@ -11,7 +11,7 @@ static struct hash frame_hash;
 static uint64_t frame_hash_func(const struct hash_elem *, void *);
 static bool frame_less_func(const struct hash_elem *,
 							const struct hash_elem *, void *);
-static struct lock frame_lock;
+static struct lock ft_lock;
 
 static uint64_t spt_hash_func(const struct hash_elem *, void *);
 static bool spt_less_func(const struct hash_elem *,
@@ -53,7 +53,7 @@ void vm_init(void) {
 	if (!hash_init(&frame_hash, frame_hash_func, frame_less_func, NULL)) {
 		PANIC("frame hash init fail");
 	}
-	lock_init(&frame_lock);
+	lock_init(&ft_lock);
 }
 
 /* Get the type of the page. This function is useful if you want to know the
@@ -129,7 +129,7 @@ static struct frame *vm_get_victim(void) {
 	struct page *page;
 	uint64_t *pte;
 
-	lock_acquire(&frame_lock);
+	lock_acquire(&ft_lock);
 	ASSERT(!hash_empty(&frame_hash));
 	if (!hash_cur(&before_i)) {
 		hash_first(&before_i, &frame_hash);
@@ -157,7 +157,7 @@ static struct frame *vm_get_victim(void) {
 	} while (hash_cur(&current_i) != hash_cur(&before_i));
 
 	memcpy(&before_i, &current_i, sizeof(struct hash_iterator));
-	lock_release(&frame_lock);
+	lock_release(&ft_lock);
 
 	return victim;
 }
@@ -192,9 +192,9 @@ static struct frame *vm_get_frame(void) {
 		ASSERT(frame != NULL);
 		frame->kva = kva;
 		frame->page = NULL;
-		lock_acquire(&frame_lock);
+		lock_acquire(&ft_lock);
 		old_frame_elem = hash_insert(&frame_hash, &frame->ft_elem);
-		lock_release(&frame_lock);
+		lock_release(&ft_lock);
 	} else {
 		frame = vm_evict_frame();
 	}
