@@ -10,6 +10,9 @@
 
 #include "vm/vm.h"
 #include "vm/uninit.h"
+#include "userprog/process.h"
+#include "threads/mmu.h"
+#include <string.h>
 
 static bool uninit_initialize(struct page *page, void *kva);
 static void uninit_destroy(struct page *page);
@@ -60,4 +63,37 @@ static void uninit_destroy(struct page *page) {
 	struct uninit_page *uninit UNUSED = &page->uninit;
 	/* TODO: Fill this function.
 	 * TODO: If you don't have anything to do, just return. */
+}
+
+bool uninit_page_initializer(struct page *page, enum vm_type type, void *kva) {
+	uint64_t *pml4;
+	bool ret;
+
+	if (!page->uninit.init) {
+		memset(kva, 0, PGSIZE);
+	}
+
+	switch (type) {
+	case VM_ANON:
+		ret = anon_initializer(page, type, kva);
+		break;
+	case VM_FILE:
+		ret = file_backed_initializer(page, type, kva);
+		break;
+	case VM_PAGE_CACHE:
+		PANIC("not made");
+		ret = anon_initializer(page, type, kva);
+		break;
+	default:
+		PANIC("given type is abnormal");
+		break;
+	}
+
+	if (!ret) {
+		return false;
+	}
+
+	pml4 = page->thread->pml4;
+	return (pml4_get_page(pml4, page->va) == NULL &&
+			pml4_set_page(pml4, page->va, kva, page->writable));
 }

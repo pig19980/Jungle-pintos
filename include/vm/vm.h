@@ -47,7 +47,8 @@ struct page {
 	struct frame *frame; /* Back reference for frame */
 
 	/* Your implementation */
-	struct process *process;
+	struct thread *thread;
+	bool writable;
 	struct hash_elem spt_elem;
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */
@@ -113,5 +114,12 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage,
 void vm_dealloc_page(struct page *page);
 bool vm_claim_page(void *va);
 enum vm_type page_get_type(struct page *page);
+
+struct vm_alloc_with_file_arg {
+	struct file *file;
+	off_t ofs;
+	uint32_t read_bytes;
+	uint32_t zero_bytes;
+};
 
 #endif /* VM_VM_H */
