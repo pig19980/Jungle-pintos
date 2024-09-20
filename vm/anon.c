@@ -68,6 +68,7 @@ static bool anon_swap_out(struct page *page) {
 		return false;
 	}
 	disk_write(swap_disk, anon_page->sec_no, page->frame->kva);
+	page->frame = NULL;
 	return true;
 }
 
@@ -80,5 +81,4 @@ static void anon_destroy(struct page *page) {
 		bitmap_reset(swap_bitmap, anon_page->sec_no);
 		lock_release(&swap_lock);
 	}
-	free(page);
 }
