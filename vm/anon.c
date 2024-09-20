@@ -47,13 +47,15 @@ bool anon_initializer(struct page *page, enum vm_type type, void *kva) {
 /* Swap in the page by read contents from the swap disk. */
 static bool anon_swap_in(struct page *page, void *kva) {
 	struct anon_page *anon_page = &page->anon;
+	uint64_t *pml4 = page->thread->pml4;
 	disk_read(swap_disk, anon_page->sec_no, kva);
 	lock_acquire(&swap_lock);
 	ASSERT(bitmap_test(swap_bitmap, anon_page->sec_no) == true);
 	bitmap_reset(swap_bitmap, anon_page->sec_no);
 	lock_release(&swap_lock);
 	anon_page->sec_no = BITMAP_ERROR;
-	return true;
+	return (pml4_get_page(pml4, page->va) == NULL &&
+			pml4_set_page(pml4, page->va, kva, page->writable));
 }
 
 /* Swap out the page by writing contents to the swap disk. */
