@@ -310,7 +310,7 @@ void supplemental_page_table_kill(struct supplemental_page_table *spt) {
 
 void spt_destroy_func(struct hash_elem *e, void *aux UNUSED) {
 	struct page *page = hash_entry(e, struct page, spt_elem);
-	destroy(page);
+	vm_dealloc_page(page);
 }
 
 void spt_destroy(struct supplemental_page_table *spt) {
