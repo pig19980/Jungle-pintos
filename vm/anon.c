@@ -48,22 +48,24 @@ bool anon_initializer(struct page *page, enum vm_type type, void *kva) {
 /* Swap in the page by read contents from the swap disk. */
 static bool anon_swap_in(struct page *page, void *kva) {
 	struct anon_page *anon_page = &page->anon;
-	uint64_t *pml4 = page->thread->pml4;
+	if (anon_page->sec_no != BITMAP_ERROR) {
+		return false;
+	}
 	disk_read(swap_disk, anon_page->sec_no, kva);
 	lock_acquire(&swap_lock);
 	ASSERT(bitmap_test(swap_bitmap, anon_page->sec_no) == true);
 	bitmap_reset(swap_bitmap, anon_page->sec_no);
 	lock_release(&swap_lock);
 	anon_page->sec_no = BITMAP_ERROR;
-	ASSERT(pml4_get_page(pml4, page->va) == NULL);
-	return pml4_set_page(pml4, page->va, kva, page->writable);
+	return true;
 }
 
 /* Swap out the page by writing contents to the swap disk. */
 static bool anon_swap_out(struct page *page) {
 	struct anon_page *anon_page = &page->anon;
-	uint64_t *pml4 = page->thread->pml4;
-	uint64_t *pte;
+	if (anon_page->sec_no == BITMAP_ERROR) {
+		return false;
+	}
 	lock_acquire(&swap_lock);
 	anon_page->sec_no = bitmap_scan_and_flip(swap_bitmap, 0, sec_cnt, false);
 	lock_release(&swap_lock);
@@ -71,9 +73,6 @@ static bool anon_swap_out(struct page *page) {
 		return false;
 	}
 	disk_write(swap_disk, anon_page->sec_no, page->frame->kva);
-	pte = pml4e_walk(pml4, (uint64_t)page->va, false);
-	ASSERT(pte != NULL && (*pte & PTE_P) != 0);
-	pml4_clear_page(pml4, page->va);
 	page->frame = NULL;
 	return true;
 }
@@ -86,5 +85,6 @@ static void anon_destroy(struct page *page) {
 		ASSERT(bitmap_test(swap_bitmap, anon_page->sec_no) == true);
 		bitmap_reset(swap_bitmap, anon_page->sec_no);
 		lock_release(&swap_lock);
+		anon_page->sec_no = BITMAP_ERROR;
 	}
 }

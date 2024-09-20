@@ -13,6 +13,7 @@
 #include "userprog/process.h"
 #include "threads/mmu.h"
 #include <string.h>
+#include "threads/malloc.h"
 
 static bool uninit_initialize(struct page *page, void *kva);
 static void uninit_destroy(struct page *page);
@@ -77,30 +78,20 @@ static void uninit_destroy(struct page *page) {
 }
 
 bool uninit_page_initializer(struct page *page, enum vm_type type, void *kva) {
-	uint64_t *pml4;
-	bool ret;
-
 	switch (type) {
 	case VM_ANON:
-		ret = anon_initializer(page, type, kva);
+		return anon_initializer(page, type, kva);
 		break;
 	case VM_FILE:
-		ret = file_backed_initializer(page, type, kva);
+		return file_backed_initializer(page, type, kva);
 		break;
 	case VM_PAGE_CACHE:
 		PANIC("not made");
-		ret = anon_initializer(page, type, kva);
+		return anon_initializer(page, type, kva);
 		break;
 	default:
 		PANIC("given type is abnormal");
+		return false;
 		break;
 	}
-
-	if (!ret) {
-		return false;
-	}
-
-	pml4 = page->thread->pml4;
-	ASSERT(pml4_get_page(pml4, page->va) == NULL);
-	return pml4_set_page(pml4, page->va, kva, page->writable);
 }

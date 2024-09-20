@@ -25,6 +25,15 @@ enum vm_type {
 	VM_MARKER_END = (1 << 31),
 };
 
+enum page_flags {
+	/* page is writable */
+	VM_WRITABLE = 1,
+	/* page is sharing frame with other page */
+	VM_SHARING = 2,
+	/* page is swap in status */
+	VM_ON_PHYMEM = 4,
+};
+
 #include "devices/disk.h"
 #include "vm/uninit.h"
 #include "vm/anon.h"
@@ -32,6 +41,7 @@ enum vm_type {
 #ifdef EFILESYS
 #include "filesys/page_cache.h"
 #endif
+#include "threads/synch.h"
 
 struct page_operations;
 struct thread;
@@ -44,13 +54,21 @@ struct thread;
  * DO NOT REMOVE/MODIFY PREDEFINED MEMBER OF THIS STRUCTURE. */
 struct page {
 	const struct page_operations *operations;
-	void *va;			 /* Address in terms of user space */
-	struct frame *frame; /* Back reference for frame */
+	void *va; /* Address in terms of user space */
+	union {
+		struct frame *frame; /* Back reference for frame */
+		struct page *sharing_page;
+	};
 
-	/* Your implementation */
+	enum page_flags flags;
 	struct thread *thread;
-	bool writable;
+
+	struct list sharing_list;	  /* List of page using same frame*/
+	struct list_elem sharing_elem; /* Using same frame if sharing_page is same */
+	struct lock sharing_lock;	  /* Lock for acessing sharing_list*/
+
 	struct hash_elem spt_elem;
+	struct list_elem page_elem; /* Frame get page by this elem*/
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */
 	union {
@@ -63,10 +81,15 @@ struct page {
 	};
 };
 
+#define vm_writable(page) ((((page)->flags) & VM_WRITABLE) != 0)
+#define vm_sharing(page) ((((page)->flags) & VM_SHARING) != 0)
+#define vm_on_phymem(page) ((((page)->flags) & VM_ON_PHYMEM) != 0)
+
 /* The representation of "frame" */
 struct frame {
 	void *kva;
-	struct page *page;
+	struct list page_list;
+	struct lock page_lock;
 	struct hash_elem ft_elem;
 };
 
@@ -80,6 +103,12 @@ struct page_operations {
 	void (*destroy)(struct page *);
 	enum vm_type type;
 };
+
+bool vm_swap_in(struct page *page, void *kva);
+bool vm_swap_out(struct page *page);
+void vm_destroy(struct page *page);
+
+bool vm_split_page(struct page *page);
 
 #define swap_in(page, v) (page)->operations->swap_in((page), v)
 #define swap_out(page) (page)->operations->swap_out(page)
