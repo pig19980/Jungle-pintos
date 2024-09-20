@@ -17,6 +17,7 @@ static struct lock ft_lock;
 static uint64_t spt_hash_func(const struct hash_elem *, void *);
 static bool spt_less_func(const struct hash_elem *,
 						  const struct hash_elem *, void *);
+static void spt_destroy_func(struct hash_elem *, void *);
 
 uint64_t frame_hash_func(const struct hash_elem *e, void *aux UNUSED) {
 	struct frame *frame = hash_entry(e, struct frame, ft_elem);
@@ -301,7 +302,17 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 								  struct supplemental_page_table *src UNUSED) {}
 
 /* Free the resource hold by the supplemental page table */
-void supplemental_page_table_kill(struct supplemental_page_table *spt UNUSED) {
+void supplemental_page_table_kill(struct supplemental_page_table *spt) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
+	hash_clear(&spt->spt_hash, spt_destroy_func);
+}
+
+void spt_destroy_func(struct hash_elem *e, void *aux UNUSED) {
+	struct page *page = hash_entry(e, struct page, spt_elem);
+	destroy(page);
+}
+
+void spt_destroy(struct supplemental_page_table *spt) {
+	hash_destroy(&spt->spt_hash, spt_destroy_func);
 }

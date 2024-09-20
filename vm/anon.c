@@ -3,6 +3,7 @@
 #include "vm/vm.h"
 #include <bitmap.h>
 #include "threads/synch.h"
+#include "threads/malloc.h"
 
 /* DO NOT MODIFY BELOW LINE */
 static struct disk *swap_disk;
@@ -34,6 +35,8 @@ void vm_anon_init(void) {
 /* Initialize the file mapping */
 bool anon_initializer(struct page *page, enum vm_type type, void *kva) {
 	/* Set up the handler */
+	ASSERT(type == VM_ANON);
+	ASSERT(page->frame->kva == kva);
 	page->operations = &anon_ops;
 
 	struct anon_page *anon_page = &page->anon;
@@ -57,7 +60,7 @@ static bool anon_swap_in(struct page *page, void *kva) {
 static bool anon_swap_out(struct page *page) {
 	struct anon_page *anon_page = &page->anon;
 	lock_acquire(&swap_lock);
-	anon_page->sec_no = bitmap_scan_and_flip(swap_disk, 0, sec_cnt, false);
+	anon_page->sec_no = bitmap_scan_and_flip(swap_bitmap, 0, sec_cnt, false);
 	lock_release(&swap_lock);
 	if (anon_page->sec_no == BITMAP_ERROR) {
 		return false;
@@ -69,4 +72,11 @@ static bool anon_swap_out(struct page *page) {
 /* Destroy the anonymous page. PAGE will be freed by the caller. */
 static void anon_destroy(struct page *page) {
 	struct anon_page *anon_page = &page->anon;
+	if (anon_page->sec_no != BITMAP_ERROR) {
+		lock_acquire(&swap_lock);
+		ASSERT(bitmap_test(swap_bitmap, anon_page->sec_no) == true);
+		bitmap_reset(swap_bitmap, anon_page->sec_no);
+		lock_release(&swap_lock);
+	}
+	free(page);
 }

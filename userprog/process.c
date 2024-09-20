@@ -360,6 +360,9 @@ void process_exit(void) {
 		palloc_free_page(curr->fd_list);
 	}
 	process_cleanup();
+#ifdef VM
+	spt_destroy(&curr->thread.spt);
+#endif
 	if (curr->is_process) {
 		sema_down(&curr->parent_waited);
 	}

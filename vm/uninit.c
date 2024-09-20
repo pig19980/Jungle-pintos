@@ -71,6 +71,9 @@ static void uninit_destroy(struct page *page) {
 	struct uninit_page *uninit UNUSED = &page->uninit;
 	/* TODO: Fill this function.
 	 * TODO: If you don't have anything to do, just return. */
+	if (uninit->aux) {
+		free(uninit->aux);
+	}
 }
 
 bool uninit_page_initializer(struct page *page, enum vm_type type, void *kva) {
