@@ -4,6 +4,7 @@
 #include <bitmap.h>
 #include "threads/synch.h"
 #include "threads/malloc.h"
+#include "threads/mmu.h"
 
 /* DO NOT MODIFY BELOW LINE */
 static struct disk *swap_disk;
@@ -61,6 +62,8 @@ static bool anon_swap_in(struct page *page, void *kva) {
 /* Swap out the page by writing contents to the swap disk. */
 static bool anon_swap_out(struct page *page) {
 	struct anon_page *anon_page = &page->anon;
+	uint64_t *pml4 = page->thread->pml4;
+	uint64_t *pte;
 	lock_acquire(&swap_lock);
 	anon_page->sec_no = bitmap_scan_and_flip(swap_bitmap, 0, sec_cnt, false);
 	lock_release(&swap_lock);
@@ -68,6 +71,9 @@ static bool anon_swap_out(struct page *page) {
 		return false;
 	}
 	disk_write(swap_disk, anon_page->sec_no, page->frame->kva);
+	pte = pml4e_walk(pml4, (uint64_t)page->va, false);
+	ASSERT(pte != NULL && (*pte & PTE_P) != 0);
+	pml4_clear_page(pml4, page->va);
 	page->frame = NULL;
 	return true;
 }
