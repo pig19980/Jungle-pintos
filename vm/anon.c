@@ -54,8 +54,8 @@ static bool anon_swap_in(struct page *page, void *kva) {
 	bitmap_reset(swap_bitmap, anon_page->sec_no);
 	lock_release(&swap_lock);
 	anon_page->sec_no = BITMAP_ERROR;
-	return (pml4_get_page(pml4, page->va) == NULL &&
-			pml4_set_page(pml4, page->va, kva, page->writable));
+	ASSERT(pml4_get_page(pml4, page->va) == NULL);
+	return pml4_set_page(pml4, page->va, kva, page->writable);
 }
 
 /* Swap out the page by writing contents to the swap disk. */

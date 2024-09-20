@@ -101,6 +101,6 @@ bool uninit_page_initializer(struct page *page, enum vm_type type, void *kva) {
 	}
 
 	pml4 = page->thread->pml4;
-	return (pml4_get_page(pml4, page->va) == NULL &&
-			pml4_set_page(pml4, page->va, kva, page->writable));
+	ASSERT(pml4_get_page(pml4, page->va) == NULL);
+	return pml4_set_page(pml4, page->va, kva, page->writable);
 }
