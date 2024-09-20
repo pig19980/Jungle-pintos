@@ -25,6 +25,7 @@ enum vm_type {
 	VM_MARKER_END = (1 << 31),
 };
 
+#include "devices/disk.h"
 #include "vm/uninit.h"
 #include "vm/anon.h"
 #include "vm/file.h"
