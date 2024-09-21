@@ -12,10 +12,11 @@
 #include "userprog/process.h"
 #include <string.h>
 #include "threads/palloc.h"
+#include "filesys/filesys.h"
 
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
-void syscall_check_vaddr(uint64_t, struct process *);
+void syscall_check_vaddr(uint64_t);
 
 /* System call.
  *
@@ -42,7 +43,7 @@ void syscall_init(void) {
 			  FLAG_IF | FLAG_TF | FLAG_DF | FLAG_IOPL | FLAG_AC | FLAG_NT);
 }
 
-void syscall_check_vaddr(uint64_t va, struct process *curr) {
+void syscall_check_vaddr(uint64_t va) {
 	int temp;
 	if (!is_user_vaddr(va)) {
 		exit_with_exit_status(-1);
@@ -72,18 +73,18 @@ void syscall_handler(struct intr_frame *f) {
 		NOT_REACHED();
 		break;
 	case SYS_FORK:
-		syscall_check_vaddr(f->R.rdi, current);
+		syscall_check_vaddr(f->R.rdi);
 		f->R.rax = process_fork((void *)f->R.rdi, f);
 		break;
 	case SYS_EXEC:
-		syscall_check_vaddr(f->R.rdi, current);
+		syscall_check_vaddr(f->R.rdi);
 
-		char *fn_copy, *temp_ptr;
+		char *fn_copy;
 		fn_copy = palloc_get_page(0);
 		if (fn_copy == NULL) {
 			exit_with_exit_status(-1);
 		}
-		strlcpy(fn_copy, f->R.rdi, PGSIZE);
+		strlcpy(fn_copy, (void *)f->R.rdi, PGSIZE);
 
 		exit_with_exit_status(process_exec(fn_copy));
 		NOT_REACHED();
@@ -92,26 +93,26 @@ void syscall_handler(struct intr_frame *f) {
 		f->R.rax = process_wait(f->R.rdi);
 		break;
 	case SYS_CREATE:
-		syscall_check_vaddr(f->R.rdi, current);
+		syscall_check_vaddr(f->R.rdi);
 		f->R.rax = filesys_create((void *)f->R.rdi, f->R.rsi);
 		break;
 	case SYS_REMOVE:
-		syscall_check_vaddr(f->R.rdi, current);
+		syscall_check_vaddr(f->R.rdi);
 		f->R.rax = filesys_remove((void *)f->R.rdi);
 		break;
 	case SYS_OPEN:
-		syscall_check_vaddr(f->R.rdi, current);
+		syscall_check_vaddr(f->R.rdi);
 		f->R.rax = fd_open((void *)f->R.rdi, *current->fd_list);
 		break;
 	case SYS_FILESIZE:
 		f->R.rax = fd_filesize(f->R.rdi, *current->fd_list);
 		break;
 	case SYS_READ:
-		syscall_check_vaddr(f->R.rsi, current);
+		syscall_check_vaddr(f->R.rsi);
 		f->R.rax = fd_read(f->R.rdi, (void *)f->R.rsi, f->R.rdx, *current->fd_list);
 		break;
 	case SYS_WRITE:
-		syscall_check_vaddr(f->R.rsi, current);
+		syscall_check_vaddr(f->R.rsi);
 		f->R.rax = fd_write(f->R.rdi, (void *)f->R.rsi, f->R.rdx, *current->fd_list);
 		break;
 	case SYS_SEEK:
