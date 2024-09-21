@@ -103,6 +103,7 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage,
 		uninit_new(page, upage, init, type, aux, uninit_page_initializer);
 		page->thread = thread_current();
 		page->frame = NULL;
+		lock_init(&page->page_lock);
 		if (writable) {
 			page->flags = VM_WRITABLE;
 		} else {
@@ -196,10 +197,14 @@ static struct frame *vm_evict_frame(void) {
 	}
 
 	ASSERT(pml4_get_page(pml4, page->va) != NULL);
-	pml4_clear_page(pml4, page->va);
+
+	lock_acquire(&page->page_lock);
 	page->flags &= ~VM_ON_PHYMEM;
 	victim->page = NULL;
 	page->frame = NULL;
+	lock_release(&page->page_lock);
+
+	pml4_clear_page(pml4, page->va);
 
 	return victim;
 }
@@ -212,6 +217,7 @@ static struct frame *vm_get_frame(void) {
 	struct frame *frame;
 	void *kva;
 	struct hash_elem *old_frame_elem = NULL;
+	struct frame *old_frame;
 	/* TODO: Fill this function. */
 
 	lock_acquire(&ft_lock);
@@ -222,10 +228,11 @@ static struct frame *vm_get_frame(void) {
 		frame->kva = kva;
 		frame->page = NULL;
 		old_frame_elem = hash_insert(&ft_hash, &frame->ft_elem);
-		// if (old_frame_elem != NULL) {
-		// 	PANIC("Asdf");
-		// }
-		// ASSERT(old_frame_elem == NULL);
+		if (old_frame_elem != NULL) {
+			old_frame = hash_entry(old_frame_elem, struct frame, ft_elem);
+			PANIC("Asdf");
+		}
+		ASSERT(old_frame_elem == NULL);
 	} else {
 		frame = vm_evict_frame();
 	}
@@ -241,7 +248,7 @@ static void vm_stack_growth(void *addr) {
 	struct supplemental_page_table *spt = &thread_current()->spt;
 	addr = pg_round_down(addr);
 	while (!spt_find_page(spt, addr)) {
-		if (!vm_alloc_page_with_initializer(VM_ANON, addr, true, NULL, NULL)) {
+		if (!vm_alloc_page(VM_ANON, addr, true)) {
 			exit_with_exit_status(-1);
 		}
 		addr += PGSIZE;
@@ -308,6 +315,7 @@ bool vm_claim_page(void *va) {
 static bool vm_do_claim_page(struct page *page) {
 	struct frame *frame;
 	uint64_t *pml4;
+	bool sucess;
 
 	frame = vm_get_frame();
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
@@ -317,18 +325,22 @@ static bool vm_do_claim_page(struct page *page) {
 		return false;
 	}
 
+	lock_acquire(&page->page_lock);
+	ASSERT(!vm_on_phymem(page));
+
 	/* Set links */
 	frame->page = page;
 	page->frame = frame;
-
 	if (swap_in(page, frame->kva)) {
 		page->flags |= VM_ON_PHYMEM;
-		return true;
+		sucess = true;
 	} else {
 		page->frame = NULL;
 		frame->page = NULL;
-		return false;
+		sucess = false;
 	}
+	lock_release(&page->page_lock);
+	return sucess;
 }
 
 /* Initialize new supplemental page table */
@@ -342,7 +354,14 @@ static bool copy_page(struct page *dst_page, void *_aux) {
 	struct page *src_page = _aux;
 	void *kva = dst_page->frame->kva;
 	bool success = false;
+	ASSERT(dst_page->va == src_page->va);
+	lock_acquire(&src_page->page_lock);
 	if (vm_on_phymem(src_page)) {
+		ASSERT(src_page->frame->kva ==
+			   pml4_get_page(src_page->thread->pml4, src_page->va));
+		if (pml4_is_dirty(src_page->thread->pml4, src_page->va)) {
+			success = false;
+		}
 		memcpy(kva, src_page->frame->kva, PGSIZE);
 		success = true;
 	} else {
@@ -350,6 +369,7 @@ static bool copy_page(struct page *dst_page, void *_aux) {
 		success = swap_in(src_page, kva);
 		src_page->frame = NULL;
 	}
+	lock_release(&src_page->page_lock);
 
 	if (success) {
 		swap_out(dst_page);

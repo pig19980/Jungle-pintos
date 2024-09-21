@@ -60,6 +60,7 @@ struct page {
 	struct thread *thread;
 
 	struct hash_elem spt_elem;
+	struct lock page_lock; /* Lock for when copy content of this page */
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */
 	union {
