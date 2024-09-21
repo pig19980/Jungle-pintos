@@ -12,6 +12,9 @@ static bool anon_swap_in(struct page *page, void *kva);
 static bool anon_swap_out(struct page *page);
 static void anon_destroy(struct page *page);
 
+static void annon_pg_write(disk_sector_t sec_no, const void *buffer);
+static void annon_pg_read(disk_sector_t sec_no, void *buffer);
+
 static struct bitmap *swap_bitmap;
 static struct lock swap_lock;
 static disk_sector_t sec_cnt;
@@ -48,13 +51,13 @@ bool anon_initializer(struct page *page, enum vm_type type, void *kva) {
 /* Swap in the page by read contents from the swap disk. */
 static bool anon_swap_in(struct page *page, void *kva) {
 	struct anon_page *anon_page = &page->anon;
-	if (anon_page->sec_no != BITMAP_ERROR) {
+	if (anon_page->sec_no == BITMAP_ERROR) {
 		return false;
 	}
-	disk_read(swap_disk, anon_page->sec_no, kva);
+	annon_pg_read(anon_page->sec_no, kva);
 	lock_acquire(&swap_lock);
-	ASSERT(bitmap_test(swap_bitmap, anon_page->sec_no) == true);
-	bitmap_reset(swap_bitmap, anon_page->sec_no);
+	ASSERT(bitmap_all(swap_bitmap, anon_page->sec_no, SEC_WRITE_CNT));
+	bitmap_set_multiple(swap_bitmap, anon_page->sec_no, SEC_WRITE_CNT, false);
 	lock_release(&swap_lock);
 	anon_page->sec_no = BITMAP_ERROR;
 	return true;
@@ -63,16 +66,16 @@ static bool anon_swap_in(struct page *page, void *kva) {
 /* Swap out the page by writing contents to the swap disk. */
 static bool anon_swap_out(struct page *page) {
 	struct anon_page *anon_page = &page->anon;
-	if (anon_page->sec_no == BITMAP_ERROR) {
+	if (anon_page->sec_no != BITMAP_ERROR) {
 		return false;
 	}
 	lock_acquire(&swap_lock);
-	anon_page->sec_no = bitmap_scan_and_flip(swap_bitmap, 0, sec_cnt, false);
+	anon_page->sec_no = bitmap_scan_and_flip(swap_bitmap, 0, SEC_WRITE_CNT, false);
 	lock_release(&swap_lock);
 	if (anon_page->sec_no == BITMAP_ERROR) {
 		return false;
 	}
-	disk_write(swap_disk, anon_page->sec_no, page->frame->kva);
+	annon_pg_write(anon_page->sec_no, page->frame->kva);
 	page->frame = NULL;
 	return true;
 }
@@ -82,9 +85,23 @@ static void anon_destroy(struct page *page) {
 	struct anon_page *anon_page = &page->anon;
 	if (anon_page->sec_no != BITMAP_ERROR) {
 		lock_acquire(&swap_lock);
-		ASSERT(bitmap_test(swap_bitmap, anon_page->sec_no) == true);
-		bitmap_reset(swap_bitmap, anon_page->sec_no);
+		ASSERT(bitmap_all(swap_bitmap, anon_page->sec_no, SEC_WRITE_CNT));
+		bitmap_set_multiple(swap_bitmap, anon_page->sec_no, SEC_WRITE_CNT, false);
 		lock_release(&swap_lock);
 		anon_page->sec_no = BITMAP_ERROR;
+	}
+}
+
+static void annon_pg_write(disk_sector_t sec_no, const void *buffer) {
+	ASSERT(sec_no + SEC_WRITE_CNT < sec_cnt);
+	for (int i = 0; i < SEC_WRITE_CNT; ++i) {
+		disk_write(swap_disk, sec_no + i, buffer + DISK_SECTOR_SIZE * i);
+	}
+}
+
+static void annon_pg_read(disk_sector_t sec_no, void *buffer) {
+	ASSERT(sec_no + SEC_WRITE_CNT < sec_cnt);
+	for (int i = 0; i < SEC_WRITE_CNT; ++i) {
+		disk_read(swap_disk, sec_no + i, buffer + DISK_SECTOR_SIZE * i);
 	}
 }

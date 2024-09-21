@@ -19,26 +19,26 @@ static bool spt_less_func(const struct hash_elem *,
 						  const struct hash_elem *, void *);
 static void spt_destroy_func(struct hash_elem *, void *);
 
-uint64_t frame_hash_func(const struct hash_elem *e, void *aux UNUSED) {
+static uint64_t frame_hash_func(const struct hash_elem *e, void *aux UNUSED) {
 	struct frame *frame = hash_entry(e, struct frame, ft_elem);
 	return hash_bytes(&(frame->kva), sizeof(void *));
 }
 
-bool frame_less_func(const struct hash_elem *a,
-					 const struct hash_elem *b, void *aux UNUSED) {
+static bool frame_less_func(const struct hash_elem *a,
+							const struct hash_elem *b, void *aux UNUSED) {
 
 	struct frame *frame_a = hash_entry(a, struct frame, ft_elem);
 	struct frame *frame_b = hash_entry(b, struct frame, ft_elem);
 	return frame_a->kva < frame_b->kva;
 }
 
-uint64_t spt_hash_func(const struct hash_elem *e, void *aux UNUSED) {
+static uint64_t spt_hash_func(const struct hash_elem *e, void *aux UNUSED) {
 	struct page *page = hash_entry(e, struct page, spt_elem);
 	return hash_bytes(&(page->va), sizeof(void *));
 }
 
-bool spt_less_func(const struct hash_elem *a,
-				   const struct hash_elem *b, void *aux UNUSED) {
+static bool spt_less_func(const struct hash_elem *a,
+						  const struct hash_elem *b, void *aux UNUSED) {
 	struct page *page_a = hash_entry(a, struct page, spt_elem);
 	struct page *page_b = hash_entry(b, struct page, spt_elem);
 	return page_a->va < page_b->va;
@@ -160,12 +160,14 @@ static struct frame *vm_get_victim(void) {
 	ASSERT(hash_empty(&frame_hash) == false);
 	if (!hash_cur(&before_i)) {
 		hash_first(&before_i, &frame_hash);
+		hash_next(&before_i);
 	}
 	memcpy(&current_i, &before_i, sizeof(struct hash_iterator));
 	do {
 		hash_next(&current_i);
 		if (!hash_cur(&current_i)) {
 			hash_first(&current_i, &frame_hash);
+			hash_next(&current_i);
 		}
 		victim = hash_entry(hash_cur(&current_i), struct frame, ft_elem);
 		page_list = &victim->page_list;
@@ -186,11 +188,10 @@ static struct frame *vm_get_victim(void) {
 				is_accessed = true;
 			}
 		}
+		lock_release(&victim->page_lock);
 		if (!is_accessed) {
-			lock_release(&victim->page_lock);
 			break;
 		}
-		lock_release(&victim->page_lock);
 	} while (hash_cur(&current_i) != hash_cur(&before_i));
 
 	memcpy(&before_i, &current_i, sizeof(struct hash_iterator));
@@ -371,7 +372,7 @@ bool vm_swap_out(struct page *page) {
 	uint64_t *pml4;
 	uint64_t *pte;
 	bool swap_out_ret;
-	if (page->sharing_page) {
+	if (vm_sharing(page)) {
 		if (!vm_on_phymem(page->sharing_page)) {
 			swap_out_ret = swap_out(page->sharing_page);
 		} else {

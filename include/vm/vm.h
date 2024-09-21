@@ -47,6 +47,7 @@ struct page_operations;
 struct thread;
 
 #define VM_TYPE(type) ((type)&7)
+#define SEC_WRITE_CNT (PGSIZE / DISK_SECTOR_SIZE)
 
 /* The representation of "page".
  * This is kind of "parent class", which has four "child class"es, which are
@@ -91,6 +92,7 @@ struct frame {
 	struct list page_list;
 	struct lock page_lock;
 	struct hash_elem ft_elem;
+	bool is_evicting;
 };
 
 /* The function table for page operations.
