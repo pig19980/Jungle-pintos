@@ -249,7 +249,9 @@ static void vm_stack_growth(void *addr) {
 }
 
 /* Handle the fault on write_protected page */
-static bool vm_handle_wp(struct page *page UNUSED) {}
+static bool vm_handle_wp(struct page *page UNUSED) {
+	return false;
+}
 
 /* Return true on success */
 bool vm_try_handle_fault(struct intr_frame *f, void *addr,
@@ -271,7 +273,7 @@ bool vm_try_handle_fault(struct intr_frame *f, void *addr,
 		return false;
 	}
 	if (write && !vm_writable(page)) {
-		return false;
+		return vm_handle_wp(page);
 	}
 	if (not_present) {
 		return vm_do_claim_page(page);
