@@ -228,10 +228,6 @@ static struct frame *vm_get_frame(void) {
 		frame->kva = kva;
 		frame->page = NULL;
 		old_frame_elem = hash_insert(&ft_hash, &frame->ft_elem);
-		if (old_frame_elem != NULL) {
-			old_frame = hash_entry(old_frame_elem, struct frame, ft_elem);
-			PANIC("Asdf");
-		}
 		ASSERT(old_frame_elem == NULL);
 	} else {
 		frame = vm_evict_frame();
@@ -417,6 +413,7 @@ void spt_destroy_func(struct hash_elem *e, void *aux UNUSED) {
 	struct page *page = hash_entry(e, struct page, spt_elem);
 	if (vm_on_phymem(page)) {
 		page->frame->page = NULL;
+		pml4_clear_page(page->thread->pml4, page->va);
 	}
 	vm_dealloc_page(page);
 }
