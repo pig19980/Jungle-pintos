@@ -237,7 +237,16 @@ static struct frame *vm_get_frame(void) {
 }
 
 /* Growing the stack. */
-static void vm_stack_growth(void *addr UNUSED) {}
+static void vm_stack_growth(void *addr) {
+	struct supplemental_page_table *spt = &thread_current()->spt;
+	addr = pg_round_down(addr);
+	while (!spt_find_page(spt, addr)) {
+		if (!vm_alloc_page_with_initializer(VM_ANON, addr, true, NULL, NULL)) {
+			exit_with_exit_status(-1);
+		}
+		addr += PGSIZE;
+	}
+}
 
 /* Handle the fault on write_protected page */
 static bool vm_handle_wp(struct page *page UNUSED) {}
@@ -250,11 +259,15 @@ bool vm_try_handle_fault(struct intr_frame *f, void *addr,
 	struct page *page;
 	/* TODO: Validate the fault */
 	/* TODO: Your code goes here */
-	if (user && is_kernel_vaddr(pg_round_down(addr))) {
+	if (user && is_kernel_vaddr(addr)) {
 		return false;
 	}
 	page = spt_find_page(spt, pg_round_down(addr));
 	if (page == NULL) {
+		if (f->rsp - 8 <= (uintptr_t)addr) {
+			vm_stack_growth(addr);
+			return true;
+		}
 		return false;
 	}
 	if (write && !vm_writable(page)) {
