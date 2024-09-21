@@ -63,7 +63,6 @@ static bool uninit_initialize(struct page *page, void *kva) {
 	}
 uninit_done:
 	if (sucess) {
-		pml4_set_dirty(page->thread->pml4, page->va, true);
 		return true;
 	} else {
 		return false;

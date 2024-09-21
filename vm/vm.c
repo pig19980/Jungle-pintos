@@ -160,20 +160,20 @@ static struct frame *vm_get_victim(void) {
 	while (hash_next(&current_i)) {
 		victim = hash_entry(hash_cur(&current_i), struct frame, ft_elem);
 		page = victim->page;
+		if (!page) {
+			return victim;
+		}
 		pml4 = page->thread->pml4;
 		if (pml4_is_accessed(pml4, page->va)) {
 			pml4_set_accessed(pml4, page->va, false);
 		} else {
-			break;
+			return victim;
 		}
 	};
 
-	if (!hash_cur(&current_i)) {
-		hash_first(&current_i, &ft_hash);
-		hash_next(&current_i);
-		victim = hash_entry(hash_cur(&current_i), struct frame, ft_elem);
-	}
-	return victim;
+	hash_first(&current_i, &ft_hash);
+	hash_next(&current_i);
+	return victim = hash_entry(hash_cur(&current_i), struct frame, ft_elem);
 }
 
 /* Evict one page and return the corresponding frame.
@@ -187,11 +187,15 @@ static struct frame *vm_evict_frame(void) {
 	ASSERT(victim != NULL);
 
 	page = victim->page;
+	if (!page) {
+		return victim;
+	}
 	pml4 = page->thread->pml4;
 	if (pml4_is_dirty(pml4, page->va) && !swap_out(page)) {
 		return NULL;
 	}
 
+	ASSERT(pml4_get_page(pml4, page->va) != NULL);
 	pml4_clear_page(pml4, page->va);
 	page->flags &= ~VM_ON_PHYMEM;
 	victim->page = NULL;
@@ -207,9 +211,10 @@ static struct frame *vm_evict_frame(void) {
 static struct frame *vm_get_frame(void) {
 	struct frame *frame;
 	void *kva;
-	struct hash_elem *old_frame_elem;
+	struct hash_elem *old_frame_elem = NULL;
 	/* TODO: Fill this function. */
 
+	lock_acquire(&ft_lock);
 	kva = palloc_get_page(PAL_USER);
 	if (kva) {
 		frame = malloc(sizeof(struct frame));
@@ -217,10 +222,14 @@ static struct frame *vm_get_frame(void) {
 		frame->kva = kva;
 		frame->page = NULL;
 		old_frame_elem = hash_insert(&ft_hash, &frame->ft_elem);
-		ASSERT(old_frame_elem == NULL);
+		// if (old_frame_elem != NULL) {
+		// 	PANIC("Asdf");
+		// }
+		// ASSERT(old_frame_elem == NULL);
 	} else {
 		frame = vm_evict_frame();
 	}
+	lock_release(&ft_lock);
 
 	ASSERT(frame != NULL);
 	ASSERT(frame->page == NULL);
@@ -314,19 +323,66 @@ void supplemental_page_table_init(struct supplemental_page_table *spt UNUSED) {
 	}
 }
 
+static bool copy_page(struct page *dst_page, void *_aux) {
+	struct page *src_page = _aux;
+	void *kva = dst_page->frame->kva;
+	bool success = false;
+	if (vm_on_phymem(src_page)) {
+		memcpy(kva, src_page->frame->kva, PGSIZE);
+		success = true;
+	} else {
+		src_page->frame = dst_page->frame;
+		success = swap_in(src_page, kva);
+		src_page->frame = NULL;
+	}
+
+	if (success) {
+		swap_out(dst_page);
+		return true;
+	} else {
+		return false;
+	}
+}
+
 /* Copy supplemental page table from src to dst */
 bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
-								  struct supplemental_page_table *src UNUSED) {}
+								  struct supplemental_page_table *src) {
+	struct page *src_page;
+	enum vm_type src_type;
+	void *src_va;
+	bool src_writable;
+	struct hash_iterator current_i;
+	hash_first(&current_i, &src->spt_hash);
+	while (hash_next(&current_i)) {
+		src_page = hash_entry(hash_cur(&current_i), struct page, spt_elem);
+		src_type = page_get_type(src_page);
+		src_va = src_page->va;
+		src_writable = vm_writable(src_page);
+		if (!vm_alloc_page_with_initializer(src_type, src_va, src_writable,
+											copy_page, src_page)) {
+			return false;
+		}
+		if (!vm_claim_page(src_va)) {
+			return false;
+		}
+	}
+	return true;
+}
 
 /* Free the resource hold by the supplemental page table */
 void supplemental_page_table_kill(struct supplemental_page_table *spt) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
+	lock_acquire(&ft_lock);
 	hash_clear(&spt->spt_hash, spt_destroy_func);
+	lock_release(&ft_lock);
 }
 
 void spt_destroy_func(struct hash_elem *e, void *aux UNUSED) {
 	struct page *page = hash_entry(e, struct page, spt_elem);
+	if (vm_on_phymem(page)) {
+		page->frame->page = NULL;
+	}
 	vm_dealloc_page(page);
 }
 
