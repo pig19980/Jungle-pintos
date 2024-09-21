@@ -28,6 +28,8 @@ enum vm_type {
 enum page_flags {
 	/* page is writable */
 	VM_WRITABLE = 1,
+	/* page on physical memory */
+	VM_ON_PHYMEM = 2
 };
 
 #include "devices/disk.h"
@@ -71,6 +73,7 @@ struct page {
 };
 
 #define vm_writable(page) ((((page)->flags) & VM_WRITABLE) != 0)
+#define vm_on_phymem(page) ((((page)->flags) & VM_ON_PHYMEM) != 0)
 
 /* The representation of "frame" */
 struct frame {

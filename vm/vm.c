@@ -153,17 +153,16 @@ static struct frame *vm_get_victim(void) {
 	/* TODO: The policy for eviction is up to you. */
 	struct hash_iterator current_i;
 	struct page *page;
-	uint64_t *pte;
+	uint64_t *pml4;
 
 	ASSERT(hash_empty(&ft_hash) == false);
 	hash_first(&current_i, &ft_hash);
 	while (hash_next(&current_i)) {
 		victim = hash_entry(hash_cur(&current_i), struct frame, ft_elem);
 		page = victim->page;
-		pte = pml4e_walk(page->thread->pml4, (uint64_t)page->va, 0);
-		ASSERT(pte);
-		if (*pte & PTE_A) {
-			*pte &= ~(uint64_t)PTE_A;
+		pml4 = page->thread->pml4;
+		if (pml4_is_accessed(pml4, page->va)) {
+			pml4_set_accessed(pml4, page->va, false);
 		} else {
 			break;
 		}
@@ -182,19 +181,19 @@ static struct frame *vm_get_victim(void) {
 static struct frame *vm_evict_frame(void) {
 	struct frame *victim;
 	struct page *page;
-	uint64_t *pml4, *pte;
+	uint64_t *pml4;
 
 	victim = vm_get_victim();
 	ASSERT(victim != NULL);
+
 	page = victim->page;
-	if (!swap_out(page)) {
+	pml4 = page->thread->pml4;
+	if (pml4_is_dirty(pml4, page->va) && !swap_out(page)) {
 		return NULL;
 	}
 
-	pml4 = page->thread->pml4;
-	pte = pml4e_walk(pml4, (uint64_t)page->va, false);
-	ASSERT(pte != NULL && (*pte & PTE_P) != 0);
 	pml4_clear_page(pml4, page->va);
+	page->flags &= ~VM_ON_PHYMEM;
 	victim->page = NULL;
 	page->frame = NULL;
 
@@ -299,6 +298,7 @@ static bool vm_do_claim_page(struct page *page) {
 	page->frame = frame;
 
 	if (swap_in(page, frame->kva)) {
+		page->flags |= VM_ON_PHYMEM;
 		return true;
 	} else {
 		page->frame = NULL;

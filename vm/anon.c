@@ -44,39 +44,37 @@ bool anon_initializer(struct page *page, enum vm_type type, void *kva) {
 	page->operations = &anon_ops;
 
 	struct anon_page *anon_page = &page->anon;
-	anon_page->sec_no = BITMAP_ERROR;
-	return true;
-}
-
-/* Swap in the page by read contents from the swap disk. */
-static bool anon_swap_in(struct page *page, void *kva) {
-	struct anon_page *anon_page = &page->anon;
-	if (anon_page->sec_no == BITMAP_ERROR) {
-		return false;
-	}
-	annon_pg_read(anon_page->sec_no, kva);
-	lock_acquire(&swap_lock);
-	ASSERT(bitmap_all(swap_bitmap, anon_page->sec_no, SEC_WRITE_CNT));
-	bitmap_set_multiple(swap_bitmap, anon_page->sec_no, SEC_WRITE_CNT, false);
-	lock_release(&swap_lock);
-	anon_page->sec_no = BITMAP_ERROR;
-	return true;
-}
-
-/* Swap out the page by writing contents to the swap disk. */
-static bool anon_swap_out(struct page *page) {
-	struct anon_page *anon_page = &page->anon;
-	if (anon_page->sec_no != BITMAP_ERROR) {
-		return false;
-	}
 	lock_acquire(&swap_lock);
 	anon_page->sec_no = bitmap_scan_and_flip(swap_bitmap, 0, SEC_WRITE_CNT, false);
 	lock_release(&swap_lock);
 	if (anon_page->sec_no == BITMAP_ERROR) {
 		return false;
 	}
+
+	return true;
+}
+
+/* Swap in the page by read contents from the swap disk. */
+static bool anon_swap_in(struct page *page, void *kva) {
+	struct anon_page *anon_page = &page->anon;
+	ASSERT(!vm_on_phymem(page));
+	if (anon_page->sec_no == BITMAP_ERROR) {
+		return false;
+	}
+	ASSERT(bitmap_all(swap_bitmap, anon_page->sec_no, SEC_WRITE_CNT));
+	annon_pg_read(anon_page->sec_no, kva);
+	return true;
+}
+
+/* Swap out the page by writing contents to the swap disk. */
+static bool anon_swap_out(struct page *page) {
+	struct anon_page *anon_page = &page->anon;
+	ASSERT(vm_on_phymem(page));
+	if (anon_page->sec_no == BITMAP_ERROR) {
+		return false;
+	}
+	ASSERT(bitmap_all(swap_bitmap, anon_page->sec_no, SEC_WRITE_CNT));
 	annon_pg_write(anon_page->sec_no, page->frame->kva);
-	page->frame = NULL;
 	return true;
 }
 

@@ -50,15 +50,21 @@ static bool uninit_initialize(struct page *page, void *kva) {
 	/* Fetch first, page_initialize may overwrite the values */
 	vm_initializer *init = uninit->init;
 	void *aux = uninit->aux;
+	bool sucess = false;
 
 	/* TODO: You may need to fix this function. */
 	if (uninit->page_initializer(page, uninit->type, kva)) {
 		if (init) {
-			return init(page, aux);
+			sucess = init(page, aux);
 		} else {
 			memset(kva, 0, PGSIZE);
-			return true;
+			sucess = true;
 		}
+	}
+uninit_done:
+	if (sucess) {
+		pml4_set_dirty(page->thread->pml4, page->va, true);
+		return true;
 	} else {
 		return false;
 	}
