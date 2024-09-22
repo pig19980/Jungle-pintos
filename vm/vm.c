@@ -280,10 +280,9 @@ bool vm_try_handle_fault(struct intr_frame *f, void *addr,
 	}
 	if (not_present) {
 		return vm_do_claim_page(page);
-	} else {
-		PANIC("no case");
-		return false;
 	}
+	/* Only when check valid address in system call */
+	return true;
 }
 
 /* Free the page.

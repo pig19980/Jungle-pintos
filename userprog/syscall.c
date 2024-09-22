@@ -16,7 +16,7 @@
 
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
-void syscall_check_vaddr(uint64_t);
+void syscall_check_vaddr(struct intr_frame *, uint64_t, bool);
 
 /* System call.
  *
@@ -43,12 +43,14 @@ void syscall_init(void) {
 			  FLAG_IF | FLAG_TF | FLAG_DF | FLAG_IOPL | FLAG_AC | FLAG_NT);
 }
 
-void syscall_check_vaddr(uint64_t va) {
-	int temp;
+void syscall_check_vaddr(struct intr_frame *f, uint64_t va, bool write) {
+	int64_t temp;
 	if (!is_user_vaddr(va)) {
 		exit_with_exit_status(-1);
 	}
-	temp = *(int *)va;
+	if (!vm_try_handle_fault(f, (void *)va, true, write, false)) {
+		exit_with_exit_status(-1);
+	}
 	return;
 }
 
@@ -73,11 +75,11 @@ void syscall_handler(struct intr_frame *f) {
 		NOT_REACHED();
 		break;
 	case SYS_FORK:
-		syscall_check_vaddr(f->R.rdi);
+		syscall_check_vaddr(f, f->R.rdi, false);
 		f->R.rax = process_fork((void *)f->R.rdi, f);
 		break;
 	case SYS_EXEC:
-		syscall_check_vaddr(f->R.rdi);
+		syscall_check_vaddr(f, f->R.rdi, false);
 
 		char *fn_copy;
 		fn_copy = palloc_get_page(0);
@@ -93,26 +95,26 @@ void syscall_handler(struct intr_frame *f) {
 		f->R.rax = process_wait(f->R.rdi);
 		break;
 	case SYS_CREATE:
-		syscall_check_vaddr(f->R.rdi);
+		syscall_check_vaddr(f, f->R.rdi, false);
 		f->R.rax = filesys_create((void *)f->R.rdi, f->R.rsi);
 		break;
 	case SYS_REMOVE:
-		syscall_check_vaddr(f->R.rdi);
+		syscall_check_vaddr(f, f->R.rdi, false);
 		f->R.rax = filesys_remove((void *)f->R.rdi);
 		break;
 	case SYS_OPEN:
-		syscall_check_vaddr(f->R.rdi);
+		syscall_check_vaddr(f, f->R.rdi, false);
 		f->R.rax = fd_open((void *)f->R.rdi, *current->fd_list);
 		break;
 	case SYS_FILESIZE:
 		f->R.rax = fd_filesize(f->R.rdi, *current->fd_list);
 		break;
 	case SYS_READ:
-		syscall_check_vaddr(f->R.rsi);
+		syscall_check_vaddr(f, f->R.rsi, true);
 		f->R.rax = fd_read(f->R.rdi, (void *)f->R.rsi, f->R.rdx, *current->fd_list);
 		break;
 	case SYS_WRITE:
-		syscall_check_vaddr(f->R.rsi);
+		syscall_check_vaddr(f, f->R.rsi, false);
 		f->R.rax = fd_write(f->R.rdi, (void *)f->R.rsi, f->R.rdx, *current->fd_list);
 		break;
 	case SYS_SEEK:
