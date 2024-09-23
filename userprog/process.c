@@ -128,6 +128,7 @@ static void initd(void *f_name) {
 
 #ifdef VM
 	supplemental_page_table_init(&thread_current()->spt);
+	mmap_table_init(&thread_current()->mt);
 #endif
 
 	process_init();
@@ -146,7 +147,7 @@ tid_t process_fork(const char *name, struct intr_frame *if_) {
 	/* Clone current thread to new thread.*/
 	struct process_fork_arg fork_arg;
 	fork_arg.if_ = if_;
-	fork_arg.parent = process_current();
+	fork_arg.parent = thread_current();
 	sema_init(&fork_arg.fork_done, 0);
 
 	int tid = thread_create(name, PRI_DEFAULT, __do_fork, &fork_arg);
@@ -227,6 +228,9 @@ static void __do_fork(void *aux) {
 #ifdef VM
 	supplemental_page_table_init(&current_thread->spt);
 	if (!supplemental_page_table_copy(&current_thread->spt, &parent_thread->spt))
+		goto error;
+	mmap_table_init(&thread_current()->mt);
+	if (!mmap_table_copy(&current_thread->mt, &parent_thread->mt))
 		goto error;
 #else
 	if (!pml4_for_each(parent_thread->pml4, duplicate_pte, parent_thread))
@@ -362,6 +366,7 @@ void process_exit(void) {
 	process_cleanup();
 #ifdef VM
 	spt_destroy(&curr->thread.spt);
+	mt_destroy(&curr->thread.mt);
 #endif
 	if (curr->is_process) {
 		sema_down(&curr->parent_waited);
@@ -374,6 +379,7 @@ static void process_cleanup(void) {
 
 #ifdef VM
 	supplemental_page_table_kill(&curr->thread.spt);
+	mmap_table_kill(&curr->thread.mt);
 #endif
 
 	uint64_t *pml4;
@@ -771,7 +777,7 @@ static bool lazy_load_segment(struct page *page, void *aux) {
 	/* TODO: This called when the first page fault occurs on address VA. */
 	/* TODO: VA is available when calling this function. */
 	void *kva = page->frame->kva;
-	struct vm_alloc_with_file_arg *arg = aux;
+	struct vm_file_arg *arg = aux;
 
 	file_seek(arg->file, arg->ofs);
 	if (file_read(arg->file, kva, arg->read_bytes) != (int)arg->read_bytes) {
@@ -800,7 +806,7 @@ static bool lazy_load_segment(struct page *page, void *aux) {
 static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
 						 uint32_t read_bytes, uint32_t zero_bytes,
 						 bool writable) {
-	struct vm_alloc_with_file_arg *arg;
+	struct vm_file_arg *arg;
 
 	ASSERT((read_bytes + zero_bytes) % PGSIZE == 0);
 	ASSERT(pg_ofs(upage) == 0);
@@ -812,7 +818,7 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		 * and zero the final PAGE_ZERO_BYTES bytes. */
 		size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
 		size_t page_zero_bytes = PGSIZE - page_read_bytes;
-		arg = malloc(sizeof(struct vm_alloc_with_file_arg));
+		arg = malloc(sizeof(struct vm_file_arg));
 		if (!arg) {
 			return false;
 		}
