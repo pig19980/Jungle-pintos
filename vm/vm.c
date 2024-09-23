@@ -320,9 +320,9 @@ static bool vm_do_claim_page(struct page *page) {
 		return false;
 	}
 
-	lock_acquire(&page->page_lock);
 	ASSERT(!vm_on_phymem(page));
 
+	lock_acquire(&page->page_lock);
 	/* Set links */
 	frame->page = page;
 	page->frame = frame;

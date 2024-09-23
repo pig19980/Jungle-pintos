@@ -58,7 +58,7 @@ static bool anon_swap_in(struct page *page, void *kva) {
 
 	annon_pg_read(anon_page->sec_no, kva);
 	lock_acquire(&swap_lock);
-	bitmap_scan_and_flip(swap_bitmap, 0, SEC_WRITE_CNT, true);
+	bitmap_set_multiple(swap_bitmap, anon_page->sec_no, SEC_WRITE_CNT, false);
 	lock_release(&swap_lock);
 	anon_page->sec_no = BITMAP_ERROR;
 
