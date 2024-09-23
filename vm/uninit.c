@@ -80,22 +80,3 @@ static void uninit_destroy(struct page *page) {
 		free(uninit->aux);
 	}
 }
-
-bool uninit_page_initializer(struct page *page, enum vm_type type, void *kva) {
-	switch (type) {
-	case VM_ANON:
-		return anon_initializer(page, type, kva);
-		break;
-	case VM_FILE:
-		return file_backed_initializer(page, type, kva);
-		break;
-	case VM_PAGE_CACHE:
-		PANIC("not made");
-		return anon_initializer(page, type, kva);
-		break;
-	default:
-		PANIC("given type is abnormal");
-		return false;
-		break;
-	}
-}

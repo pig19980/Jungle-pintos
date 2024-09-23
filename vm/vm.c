@@ -100,7 +100,20 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage,
 		if (!page) {
 			goto err;
 		}
-		uninit_new(page, upage, init, type, aux, uninit_page_initializer);
+		switch (VM_TYPE(type)) {
+		case VM_ANON:
+			uninit_new(page, upage, init, type, aux, anon_initializer);
+			break;
+		case VM_FILE:
+			uninit_new(page, upage, init, type, aux, file_backed_initializer);
+			break;
+		// case VM_PAGE_CACHE:
+		// 	uninit_new(page, upage, init, type, aux, page_cache_initializer);
+		// 	break;
+		default:
+			PANIC("%d given type is abnormal", VM_TYPE(type));
+			break;
+		};
 		page->thread = thread_current();
 		page->frame = NULL;
 		lock_init(&page->page_lock);
