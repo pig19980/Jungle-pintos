@@ -681,7 +681,16 @@ static bool install_page(void *upage, void *kpage, bool writable);
  * user process if WRITABLE is true, read-only otherwise.
  *
  * Return true if successful, false if a memory allocation error
- * or disk read error occurs. */
+ * or disk read error occurs. 
+ * (파일의 OFS 오프셋에서 시작하는 세그먼트를 UPAGE 주소에 로드한다.
+ * 총 READ_BYTES + ZERO_BYTES 바이트의 가상 메모리가 다음과 같이 초기화된다.
+ * READ_BYTES만큼의 바이트는 OFS 오프셋에서 시작하는 FILE에서 UPAGE로 읽어온다.
+ * UPAGE + READ_BYTES에 위치한 ZERO_BYTES만큼의 바이트는 0으로 초기화된다.
+ * 
+ * 이 함수에 의해 초기화된 페이지는 WRITABLE이 true일 경우 사용자 프로세스에 의해
+ * 쓰기가 가능해야 하고, 그렇지 않으면 읽기 전용이어야 한다.
+ * 성공 시 true를 반환하며, 메모리 할당 오류나 디스크 읽기 오류가 발생하면 false를 
+ * 반환한다.)*/
 static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
 						 uint32_t read_bytes, uint32_t zero_bytes,
 						 bool writable) {
@@ -762,6 +771,7 @@ static bool install_page(void *upage, void *kpage, bool writable) {
  * If you want to implement the function for only project 2, implement it on the
  * upper block. */
 
+
 static bool lazy_load_segment(struct page *page, void *aux) {
 	/* TODO: Load the segment from the file */
 	/* TODO: This called when the first page fault occurs on address VA. */
@@ -781,7 +791,17 @@ static bool lazy_load_segment(struct page *page, void *aux) {
  * user process if WRITABLE is true, read-only otherwise.
  *
  * Return true if successful, false if a memory allocation error
- * or disk read error occurs. */
+ * or disk read error occurs. 
+ * (파일 FILE의 OFS 오프셋에서 시작하는 세그먼트를 UPAGE 주소에 로드한다.
+ * 총 READ_BYTES + ZERO_BYTES 바이트의 가상 메모리가 다음과 같이 초기화됨.
+ * - READ_BYTES 바이트는 OFS 오프셋에서 시작하는 FILE의 데이터를 UPAGE에
+ * 읽어와야 한다.
+ * - READ_BYTES 이후의 UPAGE + READ_BYTES 주소부터 ZERO_BYTES바이트는 
+ * 0으로 채워져야 한다.
+ * 이 함수에 의해 초기화된 페이지는 WRITABLE이 참이면 사용자 프로세스에
+ * 의해 쓰기 가능해야 하고, 그렇지 않으면 읽기 전용이어야 한다.
+ * 메모리 할당 오류나 디스크 읽기 오류가 발생하면 false를 반환하고,
+ * 성공하면 true를 반환한다.)*/
 static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
 						 uint32_t read_bytes, uint32_t zero_bytes,
 						 bool writable) {

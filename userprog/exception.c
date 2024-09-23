@@ -106,6 +106,9 @@ static void kill(struct intr_frame *f) {
 /* Page fault handler.  This is a skeleton that must be filled in
    to implement virtual memory.  Some solutions to project 2 may
    also require modifying this code.
+   (Page fault handler. 이 코드는 가상 메모리를 구현하기 위해 작성된
+   스켈레톤 코드 입니다. 프로젝트 2의 일부 솔루션에서도 이 코드를 
+   수정해야 할 수 있습니다.)
 
    At entry, the address that faulted is in CR2 (Control Register
    2) and information about the fault, formatted as described in
@@ -113,31 +116,42 @@ static void kill(struct intr_frame *f) {
    example code here shows how to parse that information.  You
    can find more information about both of these in the
    description of "Interrupt 14--Page Fault Exception (#PF)" in
-   [IA32-v3a] section 5.15 "Exception and Interrupt Reference". */
+   [IA32-v3a] section 5.15 "Exception and Interrupt Reference". 
+   (진입 시, fault가 발생한 주소는 **CR2(Control Register 2)에 저장
+   되어 있으며, fault에 대한 정보는 exception.h에 있는 PF_매크로로
+   정의된 형식으로 F의 error_code 멤버에 저장되어 있습니다. 여기 있는
+   예시 코드는 그 정보를 어떻게 분석할 수 있는지 보여줍니다.
+   **Interrupt 14--페이지 폴트 예외(#PF)**에 대한 설명은 [IA32-v3a]문서의
+   5.15절 "예외 및 인터럽트 참조"에서 확인할 수 있습니다.)*/
 static void page_fault(struct intr_frame *f) {
-	bool not_present; /* True: not-present page, false: writing r/o page. */
-	bool write;		  /* True: access was write, false: access was read. */
-	bool user;		  /* True: access by user, false: access by kernel. */
+	bool not_present; /* True: not-present page, false: writing r/o page.  (True: 존재하지 않는 페이지 (not-present page),False: 읽기 전용 페이지에 쓰기 작업을 시도 (writing to read-only page).)*/
+	bool write;		  /* True: access was write, false: access was read. True: 쓰기 작업으로 인한 접근 (access was write),False: 읽기 작업으로 인한 접근 (access was read).*/
+	bool user;		  /* True: access by user, false: access by kernel. True: 사용자 모드에서의 접근 (access by user),False: 커널 모드에서의 접근 (access by kernel).*/
 	void *fault_addr; /* Fault address. */
 
 	/* Obtain faulting address, the virtual address that was
 	   accessed to cause the fault.  It may point to code or to
 	   data.  It is not necessarily the address of the instruction
-	   that caused the fault (that's f->rip). */
+	   that caused the fault (that's f->rip). 
+	   (폴트를 일으킨 주소, 즉 폴트가 발생한 가상 주소를 가져옵니다. 
+	   이 주소는 코드 또는 데이터에 대한 접근일 수 있습니다. 반드시 
+	   폴트를 일으킨 명령어의 주소는 아닙니다 (그 주소는 f->rip입니다).)*/
 
 	fault_addr = (void *)rcr2();
 
 	/* Turn interrupts back on (they were only off so that we could
-	   be assured of reading CR2 before it changed). */
+	   be assured of reading CR2 before it changed). 
+	   (인터럽트를 다시 활성화합니다 (이 작업은 CR2를 읽는 동안 바뀌지 
+	   않도록 하기 위해 인터럽트를 비활성화한 것입니다).)*/
 	intr_enable();
 
-	/* Determine cause. */
-	not_present = (f->error_code & PF_P) == 0;
-	write = (f->error_code & PF_W) != 0;
-	user = (f->error_code & PF_U) != 0;
+	/* Determine cause. (원인을 파악한다.) */
+	not_present = (f->error_code & PF_P) == 0;	//not-present page면 0
+	write = (f->error_code & PF_W) != 0;	// write면 1 read면 0
+	user = (f->error_code & PF_U) != 0;	// kernel이면 0, user면 1
 
 #ifdef VM
-	/* For project 3 and later. */
+	/* For project 3 and later. (프로젝트 3 및 이후 버젼에서.)*/
 	if (vm_try_handle_fault(f, fault_addr, user, write, not_present))
 		return;
 #endif
@@ -150,7 +164,8 @@ static void page_fault(struct intr_frame *f) {
 	curr->exist_status = -1;
 	thread_exit();
 #else
-	/* If the fault is true fault, show info and exit. */
+	/* If the fault is true fault, show info and exit. 
+	(만약 실제 fault라면 정보를 출력하고 종료한다.)*/
 	printf("Page fault at %p: %s error %s page in %s context.\n", fault_addr,
 		   not_present ? "not present" : "rights violation",
 		   write ? "writing" : "reading", user ? "user" : "kernel");

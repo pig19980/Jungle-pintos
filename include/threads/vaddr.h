@@ -25,13 +25,16 @@
 
 #define pg_no(va) ((uint64_t)(va) >> PGBITS)
 
-/* Round up to nearest page boundary. */
+/* Round up to nearest page boundary.
+ (가장 가까운 페이지 경계까지 올림한다.)*/
 #define pg_round_up(va) ((void *)(((uint64_t)(va) + PGSIZE - 1) & ~PGMASK))
 
-/* Round down to nearest page boundary. */
+/* Round down to nearest page boundary.
+(가장 가까운 페이지 경계까지 내림한다.) */
 #define pg_round_down(va) (void *)((uint64_t)(va) & ~PGMASK)
 
-/* Kernel virtual address start */
+/* Kernel virtual address start 
+(KERN_BASE는 기본적으로 0x8004000000)*/
 #define KERN_BASE LOADER_KERN_BASE
 
 /* User stack start */
@@ -45,11 +48,11 @@
 
 // FIXME: add checking
 /* Returns kernel virtual address at which physical address PADDR
- *  is mapped. */
+ *  is mapped.  (ptov : physical to virtual)*/
 #define ptov(paddr) ((void *)(((uint64_t)paddr) + KERN_BASE))
 
 /* Returns physical address at which kernel virtual address VADDR
- * is mapped. */
+ * is mapped. (vtop : virtual to physical)*/
 #define vtop(vaddr)                                \
 	({                                             \
 		ASSERT(is_kernel_vaddr(vaddr));            \

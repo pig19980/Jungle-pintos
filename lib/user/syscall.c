@@ -98,10 +98,17 @@ void close(int fd) { syscall1(SYS_CLOSE, fd); }
 
 int dup2(int oldfd, int newfd) { return syscall2(SYS_DUP2, oldfd, newfd); }
 
+/*fd로 열린 파일의 오프셋(offset) 바이트부터 length 바이트 만큼을 프로세스의 가상주소공간의 주소 addr 에 매핑 합니다.
+전체 파일은 addr에서 시작하는 연속 가상 페이지에 매핑됩니다. 파일 길이(length)가 PGSIZE의 배수가 아닌 경우 최종 매핑된
+페이지의 일부 바이트가 파일 끝을 넘어 "stick out"됩니다. page_fault가 발생하면 이 바이트를 0으로 설정하고 페이지를 
+디스크에 다시 쓸 때 버립니다. 성공하면 이 함수는 파일이 매핑된 가상 주소를 반환합니다. 실패하면 파일을 매핑하는 데 유효한
+ 주소가 아닌 NULL을 반환해야 합니다.*/
 void *mmap(void *addr, size_t length, int writable, int fd, off_t offset) {
 	return (void *)syscall5(SYS_MMAP, addr, length, writable, fd, offset);
 }
 
+/*지정된 주소 범위 addr에 대한 매핑을 해제한다. 지정된 주소는 아직 매핑 해제되지 않은 동일한 프로세서의 mmap에
+대한 이전 호출에서 반환된 가상 주소여야 한다.*/
 void munmap(void *addr) { syscall1(SYS_MUNMAP, addr); }
 
 bool chdir(const char *dir) { return syscall1(SYS_CHDIR, dir); }

@@ -55,12 +55,12 @@ typedef void hash_action_func(struct hash_elem *e, void *aux);
 
 /* Hash table. */
 struct hash {
-	size_t elem_cnt;	  /* Number of elements in table. */
-	size_t bucket_cnt;	/* Number of buckets, a power of 2. */
-	struct list *buckets; /* Array of `bucket_cnt' lists. */
-	hash_hash_func *hash; /* Hash function. */
-	hash_less_func *less; /* Comparison function. */
-	void *aux;			  /* Auxiliary data for `hash' and `less'. */
+	size_t elem_cnt;	  /* Number of elements in table. (테이블의 요소 수)*/
+	size_t bucket_cnt;	/* Number of buckets, a power of 2. (버킷(배열) 수, 2의 거듭제곱)*/
+	struct list *buckets; /* Array of `bucket_cnt' lists. (bucket_cnt 목록배열)*/
+	hash_hash_func *hash; /* Hash function. (hash 함수)*/
+	hash_less_func *less; /* Comparison function. (비교 함수)*/
+	void *aux;			  /* Auxiliary data for `hash' and `less'. (hash 및 less에 대한 보조 데이터)*/
 };
 
 /* A hash table iterator. */
