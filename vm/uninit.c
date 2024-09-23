@@ -61,8 +61,8 @@ static bool uninit_initialize(struct page *page, void *kva) {
 			sucess = true;
 		}
 	}
-uninit_done:
 	if (sucess) {
+		swap_out(page);
 		return true;
 	} else {
 		return false;

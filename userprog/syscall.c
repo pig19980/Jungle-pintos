@@ -44,7 +44,6 @@ void syscall_init(void) {
 }
 
 void syscall_check_vaddr(struct intr_frame *f, uint64_t va, bool write) {
-	int64_t temp;
 	if (!is_user_vaddr(va)) {
 		exit_with_exit_status(-1);
 	}

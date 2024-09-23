@@ -780,7 +780,6 @@ static bool lazy_load_segment(struct page *page, void *aux) {
 	}
 	memset(kva + arg->read_bytes, 0, arg->zero_bytes);
 	free(aux);
-	swap_out(page);
 	return true;
 }
 

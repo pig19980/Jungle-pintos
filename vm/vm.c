@@ -367,7 +367,6 @@ static bool copy_page(struct page *dst_page, void *_aux) {
 	lock_release(&src_page->page_lock);
 
 	if (success) {
-		swap_out(dst_page);
 		return true;
 	} else {
 		return false;
