@@ -71,6 +71,7 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage,
 
 		/* TODO: Insert the page into the spt.
 		(페이지를 spt에 삽입하세요.) */
+		spt_insert_page(spt, p);
 	}
 	return success = true;
 err:
