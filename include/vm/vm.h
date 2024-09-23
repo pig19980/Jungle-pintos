@@ -57,7 +57,7 @@ struct page {
 	struct frame *frame; /* Back reference for frame */
 
 	enum page_flags flags;
-	struct thread *thread;
+	uint64_t *pml4;
 
 	struct hash_elem spt_elem;
 	struct lock page_lock; /* Lock for when copy content of this page */

@@ -114,7 +114,7 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage,
 			PANIC("%d given type is abnormal", VM_TYPE(type));
 			break;
 		};
-		page->thread = thread_current();
+		page->pml4 = thread_current()->pml4;
 		page->frame = NULL;
 		lock_init(&page->page_lock);
 		if (writable) {
@@ -175,7 +175,7 @@ static struct frame *vm_get_victim(void) {
 		victim = hash_entry(hash_cur(&current_i), struct frame, ft_elem);
 		page = victim->page;
 		ASSERT(page != NULL);
-		pml4 = page->thread->pml4;
+		pml4 = page->pml4;
 		if (pml4_is_accessed(pml4, page->va)) {
 			pml4_set_accessed(pml4, page->va, false);
 		} else {
@@ -202,7 +202,7 @@ static struct frame *vm_evict_frame(void) {
 	if (!page) {
 		return victim;
 	}
-	pml4 = page->thread->pml4;
+	pml4 = page->pml4;
 	if (!swap_out(page)) {
 		return NULL;
 	}
@@ -325,7 +325,7 @@ static bool vm_do_claim_page(struct page *page) {
 
 	frame = vm_get_frame();
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
-	pml4 = page->thread->pml4;
+	pml4 = page->pml4;
 	ASSERT(pml4_get_page(pml4, page->va) == NULL);
 	if (!pml4_set_page(pml4, page->va, frame->kva, vm_writable(page))) {
 		return false;
@@ -364,7 +364,7 @@ static bool copy_page(struct page *dst_page, void *_aux) {
 	lock_acquire(&src_page->page_lock);
 	if (vm_on_phymem(src_page)) {
 		ASSERT(src_page->frame->kva ==
-			   pml4_get_page(src_page->thread->pml4, src_page->va));
+			   pml4_get_page(src_page->pml4, src_page->va));
 
 		memcpy(kva, src_page->frame->kva, PGSIZE);
 		success = true;
@@ -425,7 +425,7 @@ void spt_destroy_func(struct hash_elem *e, void *aux UNUSED) {
 	struct frame *frame = page->frame;
 	if (vm_on_phymem(page)) {
 		frame->page = NULL;
-		pml4_clear_page(page->thread->pml4, page->va);
+		pml4_clear_page(page->pml4, page->va);
 		if (frame->page == NULL) {
 			palloc_free_page(frame->kva);
 			hash_delete(&ft_hash, &frame->ft_elem);
