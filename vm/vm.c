@@ -161,9 +161,7 @@ static struct frame *vm_get_victim(void) {
 	while (hash_next(&current_i)) {
 		victim = hash_entry(hash_cur(&current_i), struct frame, ft_elem);
 		page = victim->page;
-		if (!page) {
-			return victim;
-		}
+		ASSERT(page != NULL);
 		pml4 = page->thread->pml4;
 		if (pml4_is_accessed(pml4, page->va)) {
 			pml4_set_accessed(pml4, page->va, false);
@@ -354,14 +352,16 @@ static bool copy_page(struct page *dst_page, void *_aux) {
 	if (vm_on_phymem(src_page)) {
 		ASSERT(src_page->frame->kva ==
 			   pml4_get_page(src_page->thread->pml4, src_page->va));
-		if (pml4_is_dirty(src_page->thread->pml4, src_page->va)) {
-			success = false;
-		}
+
 		memcpy(kva, src_page->frame->kva, PGSIZE);
 		success = true;
 	} else {
 		src_page->frame = dst_page->frame;
-		success = swap_in(src_page, kva);
+		if (swap_in(src_page, kva) && swap_out(src_page)) {
+			success = true;
+		} else {
+			success = false;
+		}
 		src_page->frame = NULL;
 	}
 	lock_release(&src_page->page_lock);
@@ -409,9 +409,15 @@ void supplemental_page_table_kill(struct supplemental_page_table *spt) {
 
 void spt_destroy_func(struct hash_elem *e, void *aux UNUSED) {
 	struct page *page = hash_entry(e, struct page, spt_elem);
+	struct frame *frame = page->frame;
 	if (vm_on_phymem(page)) {
-		page->frame->page = NULL;
+		frame->page = NULL;
 		pml4_clear_page(page->thread->pml4, page->va);
+		if (frame->page == NULL) {
+			palloc_free_page(frame->kva);
+			hash_delete(&ft_hash, &frame->ft_elem);
+			free(frame);
+		}
 	}
 	vm_dealloc_page(page);
 }
