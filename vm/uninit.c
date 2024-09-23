@@ -62,7 +62,6 @@ static bool uninit_initialize(struct page *page, void *kva) {
 		}
 	}
 	if (sucess) {
-		swap_out(page);
 		return true;
 	} else {
 		return false;

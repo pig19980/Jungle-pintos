@@ -192,7 +192,7 @@ static struct frame *vm_evict_frame(void) {
 		return victim;
 	}
 	pml4 = page->thread->pml4;
-	if (pml4_is_dirty(pml4, page->va) && !swap_out(page)) {
+	if (!swap_out(page)) {
 		return NULL;
 	}
 
