@@ -12,8 +12,8 @@ static bool anon_swap_in(struct page *page, void *kva);
 static bool anon_swap_out(struct page *page);
 static void anon_destroy(struct page *page);
 
-static void annon_pg_write(disk_sector_t sec_no, const void *buffer);
-static void annon_pg_read(disk_sector_t sec_no, void *buffer);
+static void swap_write(disk_sector_t sec_no, const void *buffer);
+static void swap_read(disk_sector_t sec_no, void *buffer);
 
 static struct bitmap *swap_bitmap;
 static struct lock swap_lock;
@@ -54,9 +54,8 @@ static bool anon_swap_in(struct page *page, void *kva) {
 	struct anon_page *anon_page = &page->anon;
 
 	ASSERT(bitmap_all(swap_bitmap, anon_page->sec_no, SEC_WRITE_CNT));
-	ASSERT(!vm_on_phymem(page));
 
-	annon_pg_read(anon_page->sec_no, kva);
+	swap_read(anon_page->sec_no, kva);
 	lock_acquire(&swap_lock);
 	bitmap_set_multiple(swap_bitmap, anon_page->sec_no, SEC_WRITE_CNT, false);
 	lock_release(&swap_lock);
@@ -70,7 +69,6 @@ static bool anon_swap_out(struct page *page) {
 	struct anon_page *anon_page = &page->anon;
 
 	ASSERT(anon_page->sec_no == BITMAP_ERROR);
-	ASSERT(vm_on_phymem(page));
 
 	lock_acquire(&swap_lock);
 	anon_page->sec_no = bitmap_scan_and_flip(swap_bitmap, 0, SEC_WRITE_CNT, false);
@@ -78,7 +76,7 @@ static bool anon_swap_out(struct page *page) {
 	if (anon_page->sec_no == BITMAP_ERROR) {
 		return false;
 	}
-	annon_pg_write(anon_page->sec_no, page->frame->kva);
+	swap_write(anon_page->sec_no, page->frame->kva);
 
 	return true;
 }
@@ -97,14 +95,14 @@ static void anon_destroy(struct page *page) {
 	}
 }
 
-static void annon_pg_write(disk_sector_t sec_no, const void *buffer) {
+static void swap_write(disk_sector_t sec_no, const void *buffer) {
 	ASSERT(sec_no + SEC_WRITE_CNT <= sec_cnt);
 	for (int i = 0; i < SEC_WRITE_CNT; ++i) {
 		disk_write(swap_disk, sec_no + i, buffer + DISK_SECTOR_SIZE * i);
 	}
 }
 
-static void annon_pg_read(disk_sector_t sec_no, void *buffer) {
+static void swap_read(disk_sector_t sec_no, void *buffer) {
 	ASSERT(sec_no + SEC_WRITE_CNT <= sec_cnt);
 	for (int i = 0; i < SEC_WRITE_CNT; ++i) {
 		disk_read(swap_disk, sec_no + i, buffer + DISK_SECTOR_SIZE * i);
