@@ -57,10 +57,6 @@ bool anon_initializer(struct page *page, enum vm_type type, void *kva) {
 /* Swap in the page by read contents from the swap disk. */
 static bool anon_swap_in(struct page *page, void *kva) {
 	struct anon_page *anon_page = &page->anon;
-	// ASSERT(!vm_on_phymem(page));
-	// if (anon_page->sec_no == BITMAP_ERROR) {
-	// 	return false;
-	// }
 	ASSERT(bitmap_all(swap_bitmap, anon_page->sec_no, SEC_WRITE_CNT));
 	annon_pg_read(anon_page->sec_no, kva);
 	return true;
@@ -69,10 +65,6 @@ static bool anon_swap_in(struct page *page, void *kva) {
 /* Swap out the page by writing contents to the swap disk. */
 static bool anon_swap_out(struct page *page) {
 	struct anon_page *anon_page = &page->anon;
-	// ASSERT(vm_on_phymem(page));
-	// if (anon_page->sec_no == BITMAP_ERROR) {
-	// 	return false;
-	// }
 	ASSERT(bitmap_all(swap_bitmap, anon_page->sec_no, SEC_WRITE_CNT));
 	annon_pg_write(anon_page->sec_no, page->frame->kva);
 	return true;
@@ -91,14 +83,14 @@ static void anon_destroy(struct page *page) {
 }
 
 static void annon_pg_write(disk_sector_t sec_no, const void *buffer) {
-	ASSERT(sec_no + SEC_WRITE_CNT < sec_cnt);
+	ASSERT(sec_no + SEC_WRITE_CNT <= sec_cnt);
 	for (int i = 0; i < SEC_WRITE_CNT; ++i) {
 		disk_write(swap_disk, sec_no + i, buffer + DISK_SECTOR_SIZE * i);
 	}
 }
 
 static void annon_pg_read(disk_sector_t sec_no, void *buffer) {
-	ASSERT(sec_no + SEC_WRITE_CNT < sec_cnt);
+	ASSERT(sec_no + SEC_WRITE_CNT <= sec_cnt);
 	for (int i = 0; i < SEC_WRITE_CNT; ++i) {
 		disk_read(swap_disk, sec_no + i, buffer + DISK_SECTOR_SIZE * i);
 	}
