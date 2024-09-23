@@ -13,6 +13,9 @@
 #include <string.h>
 #include "threads/palloc.h"
 #include "filesys/filesys.h"
+#ifdef VM
+#include "vm/file.h"
+#endif
 
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
@@ -131,7 +134,12 @@ void syscall_handler(struct intr_frame *f) {
 
 	// Projects 3 syscall
 	case SYS_MMAP:
+		f->R.rax = (uint64_t)do_mmap((void *)f->R.rdi, f->R.rsi, f->R.rdx,
+									 fd_get_file(f->R.rcx, *current->fd_list), f->R.r8);
+		break;
 	case SYS_MUNMAP:
+		do_munmap((void *)f->R.rdi);
+		break;
 
 	// Projects 4 syscall
 	case SYS_CHDIR:

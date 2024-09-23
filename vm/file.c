@@ -42,7 +42,11 @@ static void file_backed_destroy(struct page *page) {
 
 /* Do the mmap */
 void *do_mmap(void *addr, size_t length, int writable, struct file *file,
-			  off_t offset) {}
+			  off_t offset) {
+	return NULL;
+}
 
 /* Do the munmap */
-void do_munmap(void *addr) {}
+void do_munmap(void *addr) {
+	return;
+}
