@@ -50,15 +50,19 @@ static bool uninit_initialize(struct page *page, void *kva) {
 	/* Fetch first, page_initialize may overwrite the values */
 	vm_initializer *init = uninit->init;
 	void *aux = uninit->aux;
+	bool sucess = false;
 
 	/* TODO: You may need to fix this function. */
 	if (uninit->page_initializer(page, uninit->type, kva)) {
 		if (init) {
-			return init(page, aux);
+			sucess = init(page, aux);
 		} else {
 			memset(kva, 0, PGSIZE);
-			return true;
+			sucess = true;
 		}
+	}
+	if (sucess) {
+		return true;
 	} else {
 		return false;
 	}
@@ -74,24 +78,5 @@ static void uninit_destroy(struct page *page) {
 	 * TODO: If you don't have anything to do, just return. */
 	if (uninit->aux) {
 		free(uninit->aux);
-	}
-}
-
-bool uninit_page_initializer(struct page *page, enum vm_type type, void *kva) {
-	switch (type) {
-	case VM_ANON:
-		return anon_initializer(page, type, kva);
-		break;
-	case VM_FILE:
-		return file_backed_initializer(page, type, kva);
-		break;
-	case VM_PAGE_CACHE:
-		PANIC("not made");
-		return anon_initializer(page, type, kva);
-		break;
-	default:
-		PANIC("given type is abnormal");
-		return false;
-		break;
 	}
 }
