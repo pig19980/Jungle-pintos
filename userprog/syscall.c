@@ -135,7 +135,7 @@ void syscall_handler(struct intr_frame *f) {
 	// Projects 3 syscall
 	case SYS_MMAP:
 		f->R.rax = (uint64_t)do_mmap((void *)f->R.rdi, f->R.rsi, f->R.rdx,
-									 fd_get_file(f->R.rcx, *current->fd_list), f->R.r8);
+									 fd_get_file(f->R.r10, *current->fd_list), f->R.r8);
 		break;
 	case SYS_MUNMAP:
 		do_munmap((void *)f->R.rdi);
