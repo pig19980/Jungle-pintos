@@ -50,9 +50,13 @@ void syscall_check_vaddr(struct intr_frame *f, uint64_t va, bool write) {
 	if (!is_user_vaddr(va)) {
 		exit_with_exit_status(-1);
 	}
+#ifndef VM
+	int temp = *(int *)va;
+#else
 	if (!vm_try_handle_fault(f, (void *)va, true, write, false)) {
 		exit_with_exit_status(-1);
 	}
+#endif
 	return;
 }
 
@@ -131,8 +135,7 @@ void syscall_handler(struct intr_frame *f) {
 	case SYS_DUP2:
 		f->R.rax = fd_dup2(f->R.rdi, f->R.rsi, *current->fd_list);
 		break;
-
-	// Projects 3 syscall
+#ifdef VM
 	case SYS_MMAP:
 		f->R.rax = (uint64_t)do_mmap((void *)f->R.rdi, f->R.rsi, f->R.rdx,
 									 fd_get_file(f->R.r10, *current->fd_list), f->R.r8);
@@ -140,8 +143,8 @@ void syscall_handler(struct intr_frame *f) {
 	case SYS_MUNMAP:
 		do_munmap((void *)f->R.rdi);
 		break;
-
-	// Projects 4 syscall
+#endif
+#ifdef EFILESYS
 	case SYS_CHDIR:
 	case SYS_MKDIR:
 	case SYS_READDIR:
@@ -150,6 +153,7 @@ void syscall_handler(struct intr_frame *f) {
 	case SYS_SYMLINK:
 	case SYS_MOUNT:
 	case SYS_UMOUNT:
+#endif
 	default:
 		printf("system call %lld not maid\n", f->R.rax);
 		exit_with_exit_status(-1);
