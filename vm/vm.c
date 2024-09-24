@@ -48,8 +48,12 @@ void vm_init(void) {
 	register_inspect_intr();
 	/* DO NOT MODIFY UPPER LINES. */
 	/* TODO: Your code goes here. */
-	if (!(frame_table = calloc(user_page_no, sizeof(struct frame)))) {
+	if (!(frame_table = malloc(sizeof(struct frame) * user_page_no))) {
 		PANIC("frame table init fail");
+	}
+	for (clock_t idx = 0; idx < user_page_no; ++idx) {
+		frame_table[idx].kva = ctov(idx);
+		list_init(&(frame_table[idx].page_list));
 	}
 	lock_init(&ft_lock);
 }
@@ -113,6 +117,8 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage,
 		page->frame = NULL;
 		lock_init(&page->page_lock);
 		page->writable = writable;
+		page->page_elem.next = &(page->page_elem.prev);
+		page->page_elem.prev = &(page->page_elem.next);
 
 		/* TODO: Insert the page into the spt. */
 		if (!spt_insert_page(spt, page)) {
@@ -150,9 +156,7 @@ void spt_remove_page(struct supplemental_page_table *spt, struct page *page) {
 	if (!hash_delete(&spt->spt_hash, &page->spt_elem)) {
 		PANIC("page not in spt");
 	}
-	lock_acquire(&ft_lock);
 	spt_destroy_func(&page->spt_elem, NULL);
-	lock_release(&ft_lock);
 }
 
 /* Get the struct frame, that will be evicted. */
@@ -162,6 +166,8 @@ static struct frame *vm_get_victim(void) {
 	static clock_t before_clock = 0;
 	clock_t current_clock;
 	struct page *page;
+	struct list_elem *page_elem;
+	bool is_acessed;
 	uint64_t *pml4;
 
 	current_clock = next_clock(before_clock);
@@ -169,14 +175,18 @@ static struct frame *vm_get_victim(void) {
 		 current_clock != before_clock;
 		 current_clock = next_clock(before_clock)) {
 		victim = &frame_table[current_clock];
-		page = victim->page;
-		if (!page) {
-			break;
+		is_acessed = false;
+		for (page_elem = list_begin(&victim->page_list);
+			 page_elem != list_end(&victim->page_list);
+			 page_elem = list_next(page_elem)) {
+			page = list_entry(page_elem, struct page, page_elem);
+			pml4 = page->pml4;
+			if (pml4_is_accessed(pml4, page->va)) {
+				pml4_set_accessed(pml4, page->va, false);
+				is_acessed = true;
+			}
 		}
-		pml4 = page->pml4;
-		if (pml4_is_accessed(pml4, page->va)) {
-			pml4_set_accessed(pml4, page->va, false);
-		} else {
+		if (!is_acessed) {
 			break;
 		}
 	}
@@ -190,29 +200,41 @@ static struct frame *vm_get_victim(void) {
 static struct frame *vm_evict_frame(void) {
 	struct frame *victim;
 	struct page *page;
+	struct list_elem *page_elem, *next_page_elem;
 	uint64_t *pml4;
 
 	victim = vm_get_victim();
+
 	ASSERT(victim != NULL);
 
-	page = victim->page;
-	if (!page) {
+	if (list_empty(&victim->page_list)) {
 		return victim;
 	}
-	pml4 = page->pml4;
-	if (!swap_out(page)) {
-		return NULL;
+	for (page_elem = list_begin(&victim->page_list);
+		 page_elem != list_end(&victim->page_list);
+		 page_elem = list_next(page_elem)) {
+		page = list_entry(page_elem, struct page, page_elem);
+		pml4 = page->pml4;
+		if (!swap_out(page)) {
+			ASSERT("swap out error");
+		}
+
+		ASSERT(pml4_get_page(pml4, page->va) != NULL);
+
+		lock_acquire(&page->page_lock);
+		page->frame = NULL;
+		lock_release(&page->page_lock);
+
+		pml4_clear_page(pml4, page->va);
 	}
+	// set as circular list
+	list_back(&victim->page_list)->next = list_begin(&victim->page_list);
+	list_begin(&victim->page_list)->prev = list_back(&victim->page_list);
 
-	ASSERT(pml4_get_page(pml4, page->va) != NULL);
+	list_head(&victim->page_list)->next = list_tail(&victim->page_list);
+	list_tail(&victim->page_list)->prev = list_head(&victim->page_list);
 
-	lock_acquire(&page->page_lock);
-	victim->page = NULL;
-	page->frame = NULL;
-	lock_release(&page->page_lock);
-
-	pml4_clear_page(pml4, page->va);
-
+	ASSERT(list_empty(&victim->page_list));
 	return victim;
 }
 
@@ -231,16 +253,16 @@ static struct frame *vm_get_frame(void) {
 	if (kva) {
 		new_clock = vtoc(kva);
 		frame = &frame_table[new_clock];
-		ASSERT(frame->page == NULL);
-		frame->kva = kva;
-		frame->page = NULL;
+		if (frame->kva != kva) {
+			ASSERT(frame->kva == kva);
+		}
 	} else {
 		frame = vm_evict_frame();
 	}
 	lock_release(&ft_lock);
 
 	ASSERT(frame != NULL);
-	ASSERT(frame->page == NULL);
+	ASSERT(list_empty(&frame->page_list));
 	return frame;
 }
 
@@ -292,8 +314,21 @@ bool vm_try_handle_fault(struct intr_frame *f, void *addr,
 
 /* Free the page.
  * DO NOT MODIFY THIS FUNCTION. */
+/* Modified to free kva page */
 void vm_dealloc_page(struct page *page) {
+	struct frame *frame;
+
 	destroy(page);
+	if (vm_on_phymem(page)) {
+		frame = page->frame;
+
+		list_remove(&page->page_elem);
+
+		pml4_clear_page(page->pml4, page->va);
+		if (list_empty(&frame->page_list)) {
+			palloc_free_page(frame->kva);
+		}
+	}
 	free(page);
 }
 
@@ -329,13 +364,13 @@ static bool vm_do_claim_page(struct page *page) {
 
 	lock_acquire(&page->page_lock);
 	/* Set links */
-	frame->page = page;
+	list_push_back(&frame->page_list, &page->page_elem);
 	page->frame = frame;
 	if (swap_in(page, frame->kva)) {
 		sucess = true;
 	} else {
 		page->frame = NULL;
-		frame->page = NULL;
+		list_remove(&page->page_elem);
 		sucess = false;
 	}
 	lock_release(&page->page_lock);
@@ -411,26 +446,14 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 void supplemental_page_table_kill(struct supplemental_page_table *spt) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
-	lock_acquire(&ft_lock);
 	hash_clear(&spt->spt_hash, spt_destroy_func);
-	lock_release(&ft_lock);
 }
 
 void spt_destroy_func(struct hash_elem *e, void *aux UNUSED) {
 	struct page *page = hash_entry(e, struct page, spt_elem);
-	struct frame *frame = page->frame;
-	uint64_t *pml4 = page->pml4;
-	void *va = page->va;
-	bool on_phymem = vm_on_phymem(page);
-
+	lock_acquire(&ft_lock);
 	vm_dealloc_page(page);
-	if (on_phymem) {
-		frame->page = NULL;
-		pml4_clear_page(pml4, va);
-		if (frame->page == NULL) {
-			palloc_free_page(frame->kva);
-		}
-	}
+	lock_release(&ft_lock);
 }
 
 void spt_destroy(struct supplemental_page_table *spt) {

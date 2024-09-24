@@ -66,6 +66,8 @@ struct page {
 	uint64_t *pml4;
 
 	struct hash_elem spt_elem;
+	struct list_elem page_elem;
+
 	struct lock page_lock; /* Lock for when copy content of this page */
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */
@@ -85,7 +87,7 @@ struct page {
 /* The representation of "frame" */
 struct frame {
 	void *kva;
-	struct page *page;
+	struct list page_list;
 };
 
 /* The function table for page operations.
