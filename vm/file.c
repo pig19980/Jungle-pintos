@@ -144,7 +144,7 @@ void *do_mmap(void *addr, size_t length, int writable, struct file *file,
 
 	// check validating input
 	if (file == NULL || file == stdin || file == stdout ||
-		!length || !file_length(file) ||
+		!length || !file_length(file) || pg_ofs(offset) ||
 		!addr || pg_ofs(addr)) {
 		goto mmap_err;
 	}
