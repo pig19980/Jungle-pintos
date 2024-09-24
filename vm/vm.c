@@ -117,6 +117,7 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage,
 		page->frame = NULL;
 		lock_init(&page->page_lock);
 		page->writable = writable;
+		page->is_sharing = false;
 		page->page_elem.next = &(page->page_elem.prev);
 		page->page_elem.prev = &(page->page_elem.next);
 
@@ -247,8 +248,6 @@ static struct frame *vm_get_frame(void) {
 	void *kva;
 	clock_t new_clock;
 	/* TODO: Fill this function. */
-
-	lock_acquire(&ft_lock);
 	kva = palloc_get_page(PAL_USER);
 	if (kva) {
 		new_clock = vtoc(kva);
@@ -259,7 +258,6 @@ static struct frame *vm_get_frame(void) {
 	} else {
 		frame = vm_evict_frame();
 	}
-	lock_release(&ft_lock);
 
 	ASSERT(frame != NULL);
 	ASSERT(list_empty(&frame->page_list));
@@ -350,30 +348,42 @@ bool vm_claim_page(void *va) {
 static bool vm_do_claim_page(struct page *page) {
 	struct frame *frame;
 	uint64_t *pml4;
-	bool sucess;
+	bool sucess = false;
+	struct list_elem *begin_elem, *cur_elem, *next_elem;
 
 	ASSERT(!vm_on_phymem(page));
 
+	lock_acquire(&ft_lock);
 	frame = vm_get_frame();
-	/* TODO: Insert page table entry to map page's VA to frame's PA. */
-	pml4 = page->pml4;
-	ASSERT(pml4_get_page(pml4, page->va) == NULL);
-	if (!pml4_set_page(pml4, page->va, frame->kva, vm_writable(page))) {
-		return false;
+
+	page->frame = frame;
+	if (!swap_in(page, frame->kva)) {
+		PANIC("I don't wan to handdle swap in fail");
 	}
 
-	lock_acquire(&page->page_lock);
-	/* Set links */
-	list_push_back(&frame->page_list, &page->page_elem);
-	page->frame = frame;
-	if (swap_in(page, frame->kva)) {
-		sucess = true;
-	} else {
-		page->frame = NULL;
-		list_remove(&page->page_elem);
-		sucess = false;
-	}
-	lock_release(&page->page_lock);
+	/* TODO: Insert page table entry to map page's VA to frame's PA. */
+	begin_elem = cur_elem = &page->page_elem;
+	do {
+		next_elem = list_next(cur_elem);
+		page = list_entry(cur_elem, struct page, page_elem);
+		pml4 = page->pml4;
+
+		ASSERT(pml4_get_page(pml4, page->va) == NULL);
+
+		if (!pml4_set_page(pml4, page->va, frame->kva, vm_writable(page))) {
+			PANIC("I don't wan to write cod about pml4 fail");
+		}
+		/* Set links */
+		lock_acquire(&page->page_lock);
+		list_push_back(&frame->page_list, &page->page_elem);
+		page->frame = frame;
+		lock_release(&page->page_lock);
+
+		cur_elem = next_elem;
+	} while (cur_elem != begin_elem);
+	sucess = true;
+claim_done:
+	lock_release(&ft_lock);
 	return sucess;
 }
 

@@ -63,6 +63,7 @@ struct page {
 	struct frame *frame; /* Back reference for frame */
 
 	bool writable;
+	bool is_sharing;
 	uint64_t *pml4;
 
 	struct hash_elem spt_elem;
@@ -81,7 +82,7 @@ struct page {
 	};
 };
 
-#define vm_writable(page) ((page)->writable)
+#define vm_writable(page) ((page)->writable || (page)->is_sharing)
 #define vm_on_phymem(page) (((page)->frame) != NULL)
 
 /* The representation of "frame" */
