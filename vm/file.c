@@ -9,6 +9,11 @@ static void file_backed_destroy(struct page *page);
 
 static bool file_init(struct page *page, void *aux);
 
+static uint64_t mt_hash_func(const struct hash_elem *, void *);
+static bool mt_less_func(const struct hash_elem *,
+						 const struct hash_elem *, void *);
+static void mt_destroy_func(struct hash_elem *, void *);
+
 /* DO NOT MODIFY this struct */
 static const struct page_operations file_ops = {
 	.swap_in = file_backed_swap_in,
@@ -71,30 +76,80 @@ void do_munmap(void *addr) {
 }
 
 void mmap_table_init(struct mmap_table *mt) {
-	return;
+	if (!hash_init(&mt->mt_hash, mt_hash_func, mt_less_func, NULL)) {
+		PANIC("mt hash init fail");
+	}
 }
 
-bool mmap_table_copy(struct mmap_table *dst,
-					 struct mmap_table *src) {
-	return false;
+bool mmap_table_copy(struct mmap_table *dst, struct mmap_table *src) {
+	struct mmap *src_mmap, *dst_mmap;
+	void *src_va;
+	struct file *src_file;
+	struct hash_iterator current_i;
+	hash_first(&current_i, &src->mt_hash);
+	while (hash_next(&current_i)) {
+		src_mmap = hash_entry(hash_cur(&current_i), struct mmap, mt_elem);
+		src_va = src_mmap->va;
+		src_file = src_mmap->file;
+		if (!(dst_mmap = malloc(sizeof(struct mmap)))) {
+			return false;
+		}
+		if (!(dst_mmap->file = file_reopen(src_file))) {
+			free(dst_mmap);
+			return false;
+		}
+		dst_mmap->va = src_va;
+		if (!mt_insert_mmap(dst, dst_mmap)) {
+			PANIC("already same mmap in mt");
+		}
+	}
+	return true;
 }
 
 void mmap_table_kill(struct mmap_table *mt) {
-	return;
+	hash_clear(&mt->mt_hash, mt_destroy_func);
 }
 
 struct mmap *mt_find_mmap(struct mmap_table *mt, void *va) {
-	return NULL;
+	struct mmap key_mmap = {.va = va};
+	struct hash_elem *mt_elem = hash_find(&mt->mt_hash, &key_mmap.mt_elem);
+	if (!mt_elem) {
+		return NULL;
+	} else {
+		return hash_entry(mt_elem, struct mmap, mt_elem);
+	}
 }
 
-bool mt_insert_mmap(struct mmap_table *mt, struct mmap *page) {
-	return false;
+bool mt_insert_mmap(struct mmap_table *mt, struct mmap *mmap) {
+	return (hash_insert(&mt->mt_hash, &mmap->mt_elem) == NULL);
 }
 
-void mt_remove_mmap(struct mmap_table *mt, struct mmap *page) {
-	return;
+void mt_remove_mmap(struct mmap_table *mt, struct mmap *mmap) {
+	if (!hash_delete(&mt->mt_hash, &mmap->mt_elem)) {
+		PANIC("mmap not in mt");
+	}
+	file_close(mmap->file);
+	free(mmap);
 }
 
 void mt_destroy(struct mmap_table *mt) {
-	return;
+	hash_destroy(&mt->mt_hash, mt_destroy_func);
+}
+
+static uint64_t mt_hash_func(const struct hash_elem *e, void *aux UNUSED) {
+	struct mmap *mmap = hash_entry(e, struct mmap, mt_elem);
+	return hash_bytes(&(mmap->va), sizeof(void *));
+}
+
+static bool mt_less_func(const struct hash_elem *a,
+						 const struct hash_elem *b, void *aux UNUSED) {
+	struct mmap *mmap_a = hash_entry(a, struct mmap, mt_elem);
+	struct mmap *mmap_b = hash_entry(b, struct mmap, mt_elem);
+	return mmap_a->va < mmap_b->va;
+}
+
+void mt_destroy_func(struct hash_elem *e, void *aux UNUSED) {
+	struct mmap *mmap = hash_entry(e, struct mmap, mt_elem);
+	file_close(mmap->file);
+	free(mmap);
 }

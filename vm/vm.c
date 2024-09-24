@@ -124,7 +124,9 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage,
 		}
 
 		/* TODO: Insert the page into the spt. */
-		spt_insert_page(spt, page);
+		if (!spt_insert_page(spt, page)) {
+			PANIC("already same page in spt");
+		}
 		return true;
 	}
 err:
@@ -150,8 +152,7 @@ struct page *spt_find_page(struct supplemental_page_table *spt,
 /* If page is allocated, no reason to fail when inserting in hash */
 bool spt_insert_page(struct supplemental_page_table *spt,
 					 struct page *page) {
-	hash_insert(&spt->spt_hash, &page->spt_elem);
-	return true;
+	return (hash_insert(&spt->spt_hash, &page->spt_elem) == NULL);
 }
 
 void spt_remove_page(struct supplemental_page_table *spt, struct page *page) {
@@ -228,7 +229,6 @@ static struct frame *vm_get_frame(void) {
 	struct frame *frame;
 	void *kva;
 	struct hash_elem *old_frame_elem = NULL;
-	struct frame *old_frame;
 	/* TODO: Fill this function. */
 
 	lock_acquire(&ft_lock);
