@@ -30,7 +30,7 @@ static void initd(void *f_name);
 static void __do_fork(void *);
 
 /* Struct for give argument to __do_fork */
-static struct process_fork_arg {
+struct process_fork_arg {
 	struct intr_frame *if_;
 	struct thread *parent;
 	struct semaphore fork_done;
@@ -50,7 +50,7 @@ static void process_init(void) {
 
 	// Free fd list except initial_thread
 	if (current->fd_list) {
-		fd_close_all(current->fd_list);
+		fd_close_all(*current->fd_list);
 	} else {
 		current->fd_list = palloc_get_page(PAL_ZERO);
 	}
@@ -360,7 +360,7 @@ void process_exit(void) {
 		printf("%s: exit(%d)\n", curr->thread.name, curr->exist_status);
 		sema_up(&curr->exist_status_setted);
 
-		fd_close_all(curr->fd_list);
+		fd_close_all(*curr->fd_list);
 		palloc_free_page(curr->fd_list);
 	}
 	process_cleanup();
@@ -375,7 +375,7 @@ void process_exit(void) {
 
 /* Free the current process's resources. */
 static void process_cleanup(void) {
-	struct process *curr = thread_current();
+	struct process *curr = process_current();
 
 #ifdef VM
 	supplemental_page_table_kill(&curr->thread.spt);
