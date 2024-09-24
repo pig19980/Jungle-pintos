@@ -20,4 +20,5 @@ int fd_dup2(int, int, fd_list);
 void fd_close_all(fd_list);
 bool fd_dup_fd_list(fd_list, fd_list);
 
+struct file *fd_get_file(int, fd_list);
 #endif /* USERPROG_FD_H */

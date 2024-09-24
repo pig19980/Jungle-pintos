@@ -12,7 +12,7 @@
 
 struct process {
 	struct thread thread;
-	struct file *(*fd_list)[FDSIZE];
+	fd_list *fd_list;
 	int exist_status;
 	bool is_process;
 	struct list child_list;

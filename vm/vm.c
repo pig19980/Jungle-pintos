@@ -107,9 +107,11 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage,
 		case VM_FILE:
 			uninit_new(page, upage, init, type, aux, file_backed_initializer);
 			break;
-		// case VM_PAGE_CACHE:
-		// 	uninit_new(page, upage, init, type, aux, page_cache_initializer);
-		// 	break;
+#ifdef EFILESYS
+		case VM_PAGE_CACHE:
+			uninit_new(page, upage, init, type, aux, page_cache_initializer);
+			break;
+#endif
 		default:
 			PANIC("%d given type is abnormal", VM_TYPE(type));
 			break;
@@ -124,7 +126,9 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage,
 		}
 
 		/* TODO: Insert the page into the spt. */
-		spt_insert_page(spt, page);
+		if (!spt_insert_page(spt, page)) {
+			PANIC("already same page in spt");
+		}
 		return true;
 	}
 err:
@@ -150,15 +154,16 @@ struct page *spt_find_page(struct supplemental_page_table *spt,
 /* If page is allocated, no reason to fail when inserting in hash */
 bool spt_insert_page(struct supplemental_page_table *spt,
 					 struct page *page) {
-	hash_insert(&spt->spt_hash, &page->spt_elem);
-	return true;
+	return (hash_insert(&spt->spt_hash, &page->spt_elem) == NULL);
 }
 
 void spt_remove_page(struct supplemental_page_table *spt, struct page *page) {
 	if (!hash_delete(&spt->spt_hash, &page->spt_elem)) {
 		PANIC("page not in spt");
 	}
-	vm_dealloc_page(page);
+	lock_acquire(&ft_lock);
+	spt_destroy_func(&page->spt_elem, NULL);
+	lock_release(&ft_lock);
 }
 
 /* Get the struct frame, that will be evicted. */
@@ -228,7 +233,6 @@ static struct frame *vm_get_frame(void) {
 	struct frame *frame;
 	void *kva;
 	struct hash_elem *old_frame_elem = NULL;
-	struct frame *old_frame;
 	/* TODO: Fill this function. */
 
 	lock_acquire(&ft_lock);
@@ -398,6 +402,9 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 	while (hash_next(&current_i)) {
 		src_page = hash_entry(hash_cur(&current_i), struct page, spt_elem);
 		src_type = page_get_type(src_page);
+		if (src_type == VM_FILE) {
+			continue;
+		}
 		src_va = src_page->va;
 		src_writable = vm_writable(src_page);
 		if (!vm_alloc_page_with_initializer(src_type, src_va, src_writable,
@@ -423,16 +430,20 @@ void supplemental_page_table_kill(struct supplemental_page_table *spt) {
 void spt_destroy_func(struct hash_elem *e, void *aux UNUSED) {
 	struct page *page = hash_entry(e, struct page, spt_elem);
 	struct frame *frame = page->frame;
-	if (vm_on_phymem(page)) {
+	uint64_t *pml4 = page->pml4;
+	void *va = page->va;
+	bool on_phymem = vm_on_phymem(page);
+
+	vm_dealloc_page(page);
+	if (on_phymem) {
 		frame->page = NULL;
-		pml4_clear_page(page->pml4, page->va);
+		pml4_clear_page(pml4, va);
 		if (frame->page == NULL) {
 			palloc_free_page(frame->kva);
 			hash_delete(&ft_hash, &frame->ft_elem);
 			free(frame);
 		}
 	}
-	vm_dealloc_page(page);
 }
 
 void spt_destroy(struct supplemental_page_table *spt) {
