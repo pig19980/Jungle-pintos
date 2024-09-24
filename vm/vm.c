@@ -119,11 +119,7 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage,
 		page->pml4 = thread_current()->pml4;
 		page->frame = NULL;
 		lock_init(&page->page_lock);
-		if (writable) {
-			page->flags = VM_WRITABLE;
-		} else {
-			page->flags = 0;
-		}
+		page->writable = writable;
 
 		/* TODO: Insert the page into the spt. */
 		if (!spt_insert_page(spt, page)) {
@@ -215,7 +211,6 @@ static struct frame *vm_evict_frame(void) {
 	ASSERT(pml4_get_page(pml4, page->va) != NULL);
 
 	lock_acquire(&page->page_lock);
-	page->flags &= ~VM_ON_PHYMEM;
 	victim->page = NULL;
 	page->frame = NULL;
 	lock_release(&page->page_lock);
@@ -327,6 +322,8 @@ static bool vm_do_claim_page(struct page *page) {
 	uint64_t *pml4;
 	bool sucess;
 
+	ASSERT(!vm_on_phymem(page));
+
 	frame = vm_get_frame();
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
 	pml4 = page->pml4;
@@ -335,14 +332,11 @@ static bool vm_do_claim_page(struct page *page) {
 		return false;
 	}
 
-	ASSERT(!vm_on_phymem(page));
-
 	lock_acquire(&page->page_lock);
 	/* Set links */
 	frame->page = page;
 	page->frame = frame;
 	if (swap_in(page, frame->kva)) {
-		page->flags |= VM_ON_PHYMEM;
 		sucess = true;
 	} else {
 		page->frame = NULL;

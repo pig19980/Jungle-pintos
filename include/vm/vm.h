@@ -25,13 +25,6 @@ enum vm_type {
 	VM_MARKER_END = (1 << 31),
 };
 
-enum page_flags {
-	/* page is writable */
-	VM_WRITABLE = 1,
-	/* page on physical memory */
-	VM_ON_PHYMEM = 2
-};
-
 /* Argument for when swap in page from file*/
 struct vm_file_arg {
 	struct file *file;
@@ -64,7 +57,7 @@ struct page {
 	void *va;			 /* Address in terms of user space */
 	struct frame *frame; /* Back reference for frame */
 
-	enum page_flags flags;
+	bool writable;
 	uint64_t *pml4;
 
 	struct hash_elem spt_elem;
@@ -81,8 +74,8 @@ struct page {
 	};
 };
 
-#define vm_writable(page) ((((page)->flags) & VM_WRITABLE) != 0)
-#define vm_on_phymem(page) ((((page)->flags) & VM_ON_PHYMEM) != 0)
+#define vm_writable(page) ((page)->writable)
+#define vm_on_phymem(page) (((page)->frame) != NULL)
 
 /* The representation of "frame" */
 struct frame {
