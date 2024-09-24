@@ -151,7 +151,7 @@ void *do_mmap(void *addr, size_t length, int writable, struct file *file,
 	// check over-lap
 	spt = &thread_current()->spt;
 	mt = &thread_current()->mt;
-	page_count = pg_no(length);
+	page_count = pg_no(pg_round_up(length));
 
 	for (uint64_t idx = 0; idx < page_count; ++idx) {
 		void *temp_addr = addr + idx * PGSIZE;
