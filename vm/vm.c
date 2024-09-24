@@ -430,16 +430,20 @@ void supplemental_page_table_kill(struct supplemental_page_table *spt) {
 void spt_destroy_func(struct hash_elem *e, void *aux UNUSED) {
 	struct page *page = hash_entry(e, struct page, spt_elem);
 	struct frame *frame = page->frame;
-	if (vm_on_phymem(page)) {
+	uint64_t *pml4 = page->pml4;
+	void *va = page->va;
+	bool on_phymem = vm_on_phymem(page);
+
+	vm_dealloc_page(page);
+	if (on_phymem) {
 		frame->page = NULL;
-		pml4_clear_page(page->pml4, page->va);
+		pml4_clear_page(pml4, va);
 		if (frame->page == NULL) {
 			palloc_free_page(frame->kva);
 			hash_delete(&ft_hash, &frame->ft_elem);
 			free(frame);
 		}
 	}
-	vm_dealloc_page(page);
 }
 
 void spt_destroy(struct supplemental_page_table *spt) {
