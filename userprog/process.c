@@ -229,9 +229,6 @@ static void __do_fork(void *aux) {
 	supplemental_page_table_init(&current_thread->spt);
 	if (!supplemental_page_table_copy(&current_thread->spt, &parent_thread->spt))
 		goto error;
-	mmap_table_init(&thread_current()->mt);
-	if (!mmap_table_copy(&current_thread->mt, &parent_thread->mt))
-		goto error;
 #else
 	if (!pml4_for_each(parent_thread->pml4, duplicate_pte, parent_thread))
 		goto error;

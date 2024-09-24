@@ -7,7 +7,9 @@ struct page;
 enum vm_type;
 
 struct file_page {
-	struct vm_file_arg file_arg;
+	struct file *file;
+	int32_t ofs;
+	uint32_t read_bytes;
 };
 
 struct mmap_table {
@@ -17,6 +19,7 @@ struct mmap_table {
 struct mmap {
 	void *va;
 	struct file *file;
+	uint32_t page_count;
 	struct hash_elem mt_elem;
 };
 
@@ -27,8 +30,6 @@ void *do_mmap(void *addr, size_t length, int writable, struct file *file,
 void do_munmap(void *va);
 
 void mmap_table_init(struct mmap_table *mt);
-bool mmap_table_copy(struct mmap_table *dst,
-					 struct mmap_table *src);
 void mmap_table_kill(struct mmap_table *mt);
 struct mmap *mt_find_mmap(struct mmap_table *mt, void *va);
 bool mt_insert_mmap(struct mmap_table *mt, struct mmap *page);
