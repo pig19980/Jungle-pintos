@@ -11,6 +11,9 @@
 #include "threads/loader.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#ifdef VM
+#include "vm/vm.h"
+#endif
 
 /* Page allocator.  Hands out memory in page-size (or
    page-multiple) chunks.  See malloc.h for an allocator that
@@ -250,6 +253,10 @@ uint64_t palloc_init(void) {
 	printf("\text_mem: 0x%llx ~ 0x%llx (Usable: %'llu kB)\n", ext_mem.start,
 		   ext_mem.end, ext_mem.size / 1024);
 	populate_pools(&base_mem, &ext_mem);
+#ifdef VM
+	user_start_page = user_pool.base;
+	user_page_no = bitmap_size(user_pool.used_map);
+#endif
 	return ext_mem.end;
 }
 

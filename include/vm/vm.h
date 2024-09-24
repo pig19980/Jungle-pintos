@@ -4,6 +4,8 @@
 #include "threads/palloc.h"
 #include <hash.h>
 
+typedef size_t clock_t;
+
 enum vm_type {
 	/* page not initialized */
 	VM_UNINIT = 0,
@@ -32,6 +34,9 @@ struct vm_file_arg {
 	uint32_t read_bytes;
 	uint32_t zero_bytes;
 };
+
+extern void *user_start_page;
+extern size_t user_page_no;
 
 #include "devices/disk.h"
 #include "vm/uninit.h"
@@ -81,7 +86,6 @@ struct page {
 struct frame {
 	void *kva;
 	struct page *page;
-	struct hash_elem ft_elem;
 };
 
 /* The function table for page operations.

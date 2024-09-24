@@ -8,29 +8,22 @@
 #include "threads/mmu.h"
 #include "userprog/process.h"
 
-static struct hash ft_hash;
-static uint64_t ft_hash_func(const struct hash_elem *, void *);
-static bool ft_less_func(const struct hash_elem *,
-						 const struct hash_elem *, void *);
+static struct frame *frame_table;
 static struct lock ft_lock;
+void *user_start_page;
+clock_t user_page_no;
+
+/* Get next clock index */
+#define next_clock(clock) (((clock) + 1) % user_page_no)
+/* Convert clock index to kernal virtual address */
+#define ctov(clock) ((void *)((user_start_page) + ((clock)*PGSIZE)))
+/* Convert kernal virtual address to clock index */
+#define vtoc(kva) ((clock_t)(pg_no((kva) - (user_start_page))))
 
 static uint64_t spt_hash_func(const struct hash_elem *, void *);
 static bool spt_less_func(const struct hash_elem *,
 						  const struct hash_elem *, void *);
 static void spt_destroy_func(struct hash_elem *, void *);
-
-static uint64_t ft_hash_func(const struct hash_elem *e, void *aux UNUSED) {
-	struct frame *frame = hash_entry(e, struct frame, ft_elem);
-	return hash_bytes(&(frame->kva), sizeof(void *));
-}
-
-static bool ft_less_func(const struct hash_elem *a,
-						 const struct hash_elem *b, void *aux UNUSED) {
-
-	struct frame *frame_a = hash_entry(a, struct frame, ft_elem);
-	struct frame *frame_b = hash_entry(b, struct frame, ft_elem);
-	return frame_a->kva < frame_b->kva;
-}
 
 static uint64_t spt_hash_func(const struct hash_elem *e, void *aux UNUSED) {
 	struct page *page = hash_entry(e, struct page, spt_elem);
@@ -55,8 +48,8 @@ void vm_init(void) {
 	register_inspect_intr();
 	/* DO NOT MODIFY UPPER LINES. */
 	/* TODO: Your code goes here. */
-	if (!hash_init(&ft_hash, ft_hash_func, ft_less_func, NULL)) {
-		PANIC("frame hash init fail");
+	if (!(frame_table = calloc(user_page_no, sizeof(struct frame)))) {
+		PANIC("frame table init fail");
 	}
 	lock_init(&ft_lock);
 }
@@ -166,27 +159,30 @@ void spt_remove_page(struct supplemental_page_table *spt, struct page *page) {
 static struct frame *vm_get_victim(void) {
 	struct frame *victim;
 	/* TODO: The policy for eviction is up to you. */
-	struct hash_iterator current_i;
+	static clock_t before_clock = 0;
+	clock_t current_clock;
 	struct page *page;
 	uint64_t *pml4;
 
-	ASSERT(hash_empty(&ft_hash) == false);
-	hash_first(&current_i, &ft_hash);
-	while (hash_next(&current_i)) {
-		victim = hash_entry(hash_cur(&current_i), struct frame, ft_elem);
+	current_clock = next_clock(before_clock);
+	for (current_clock = next_clock(before_clock);
+		 current_clock != before_clock;
+		 current_clock = next_clock(before_clock)) {
+		victim = &frame_table[current_clock];
 		page = victim->page;
-		ASSERT(page != NULL);
+		if (!page) {
+			break;
+		}
 		pml4 = page->pml4;
 		if (pml4_is_accessed(pml4, page->va)) {
 			pml4_set_accessed(pml4, page->va, false);
 		} else {
-			return victim;
+			break;
 		}
-	};
+	}
 
-	hash_first(&current_i, &ft_hash);
-	hash_next(&current_i);
-	return victim = hash_entry(hash_cur(&current_i), struct frame, ft_elem);
+	before_clock = current_clock;
+	return &frame_table[current_clock];
 }
 
 /* Evict one page and return the corresponding frame.
@@ -227,18 +223,17 @@ static struct frame *vm_evict_frame(void) {
 static struct frame *vm_get_frame(void) {
 	struct frame *frame;
 	void *kva;
-	struct hash_elem *old_frame_elem = NULL;
+	clock_t new_clock;
 	/* TODO: Fill this function. */
 
 	lock_acquire(&ft_lock);
 	kva = palloc_get_page(PAL_USER);
 	if (kva) {
-		frame = malloc(sizeof(struct frame));
-		ASSERT(frame != NULL);
+		new_clock = vtoc(kva);
+		frame = &frame_table[new_clock];
+		ASSERT(frame->page == NULL);
 		frame->kva = kva;
 		frame->page = NULL;
-		old_frame_elem = hash_insert(&ft_hash, &frame->ft_elem);
-		ASSERT(old_frame_elem == NULL);
 	} else {
 		frame = vm_evict_frame();
 	}
@@ -434,8 +429,6 @@ void spt_destroy_func(struct hash_elem *e, void *aux UNUSED) {
 		pml4_clear_page(pml4, va);
 		if (frame->page == NULL) {
 			palloc_free_page(frame->kva);
-			hash_delete(&ft_hash, &frame->ft_elem);
-			free(frame);
 		}
 	}
 }
