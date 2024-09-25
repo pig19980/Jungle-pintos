@@ -449,7 +449,7 @@ static bool vm_do_claim_page(struct page *page) {
 		lock_acquire(&frame->frame_lock);
 		list_push_back(&frame->page_list, &page->page_elem);
 		lock_release(&frame->frame_lock);
-	} else {
+	} else if (!list_empty(&frame->page_list)) {
 		for (cur_elem = list_begin(&frame->page_list);
 			 cur_elem != list_end(&frame->page_list);
 			 cur_elem = list_next(cur_elem)) {
@@ -464,6 +464,8 @@ static bool vm_do_claim_page(struct page *page) {
 				pml4_set_writable(pml4, page->va, vm_writable(page));
 			}
 		}
+	} else {
+		PANIC("I didn't maid this case");
 	}
 	lock_acquire(&frame->frame_lock);
 	frame->is_claiming = false;
