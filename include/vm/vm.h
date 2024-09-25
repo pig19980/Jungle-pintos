@@ -4,6 +4,8 @@
 #include "threads/palloc.h"
 #include <hash.h>
 
+typedef size_t clock_t;
+
 enum vm_type {
 	/* page not initialized */
 	VM_UNINIT = 0,
@@ -25,13 +27,6 @@ enum vm_type {
 	VM_MARKER_END = (1 << 31),
 };
 
-enum page_flags {
-	/* page is writable */
-	VM_WRITABLE = 1,
-	/* page on physical memory */
-	VM_ON_PHYMEM = 2
-};
-
 /* Argument for when swap in page from file*/
 struct vm_file_arg {
 	struct file *file;
@@ -39,6 +34,9 @@ struct vm_file_arg {
 	uint32_t read_bytes;
 	uint32_t zero_bytes;
 };
+
+extern void *user_start_page;
+extern size_t user_page_no;
 
 #include "devices/disk.h"
 #include "vm/uninit.h"
@@ -61,14 +59,16 @@ struct thread;
  * DO NOT REMOVE/MODIFY PREDEFINED MEMBER OF THIS STRUCTURE. */
 struct page {
 	const struct page_operations *operations;
-	void *va;			 /* Address in terms of user space */
-	struct frame *frame; /* Back reference for frame */
+	void *va;  /* Address in terms of user space */
+	void *kva; /* Address in terms of kernel space */
 
-	enum page_flags flags;
+	bool writable;
+	bool is_sharing;
 	uint64_t *pml4;
 
 	struct hash_elem spt_elem;
-	struct lock page_lock; /* Lock for when copy content of this page */
+	struct list_elem page_elem;
+
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */
 	union {
@@ -81,14 +81,13 @@ struct page {
 	};
 };
 
-#define vm_writable(page) ((((page)->flags) & VM_WRITABLE) != 0)
-#define vm_on_phymem(page) ((((page)->flags) & VM_ON_PHYMEM) != 0)
+#define vm_writable(page) (((page)->writable) && !((page)->is_sharing))
+#define vm_on_phymem(page) (((page)->kva) != NULL)
 
 /* The representation of "frame" */
 struct frame {
 	void *kva;
-	struct page *page;
-	struct hash_elem ft_elem;
+	struct list page_list;
 };
 
 /* The function table for page operations.

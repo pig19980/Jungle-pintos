@@ -34,7 +34,7 @@ void uninit_new(struct page *page, void *va, vm_initializer *init,
 
 	*page = (struct page){.operations = &uninit_ops,
 						  .va = va,
-						  .frame = NULL, /* no frame for now */
+						  .kva = NULL, /* no frame for now */
 						  .uninit = (struct uninit_page){
 							  .init = init,
 							  .type = type,
@@ -51,6 +51,7 @@ static bool uninit_initialize(struct page *page, void *kva) {
 	vm_initializer *init = uninit->init;
 	void *aux = uninit->aux;
 	bool sucess = false;
+	page->kva = kva;
 
 	/* TODO: You may need to fix this function. */
 	if (uninit->page_initializer(page, uninit->type, kva)) {

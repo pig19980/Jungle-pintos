@@ -157,4 +157,9 @@ void list_unique(struct list *, struct list *duplicates, list_less_func *,
 struct list_elem *list_max(struct list *, list_less_func *, void *aux);
 struct list_elem *list_min(struct list *, list_less_func *, void *aux);
 
+/* Circular list used in file sharing */
+void circular_init(struct list_elem *elem);
+bool circular_is_alone(struct list_elem *elem);
+void circular_make(struct list *list);
+
 #endif /* lib/kernel/list.h */

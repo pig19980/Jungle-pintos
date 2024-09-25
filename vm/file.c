@@ -30,10 +30,12 @@ void vm_file_init(void) {}
 
 /* Called when swap in from VM_UNINIT state */
 bool file_init(struct page *page, void *aux) {
-	void *kva = page->frame->kva;
+	void *kva = page->kva;
 	struct vm_file_arg *arg = aux;
 	struct file_page *file_page = &page->file;
 	uint32_t read_bytes, zero_bytes;
+
+	ASSERT(kva != NULL);
 
 	file_seek(arg->file, arg->ofs);
 	read_bytes = file_read(arg->file, kva, arg->read_bytes);
@@ -66,6 +68,8 @@ static bool file_backed_swap_in(struct page *page, void *kva) {
 	struct file *file;
 	uint32_t read_bytes, zero_bytes;
 
+	ASSERT(page->kva == NULL);
+
 	file_page = &page->file;
 	file = file_page->file;
 	ofs = file_page->ofs;
@@ -77,6 +81,7 @@ static bool file_backed_swap_in(struct page *page, void *kva) {
 	memset(kva + read_bytes, 0, zero_bytes);
 
 	file_page->read_bytes = read_bytes;
+	page->kva = NULL;
 
 	return true;
 }
@@ -90,8 +95,10 @@ static bool file_backed_swap_out(struct page *page) {
 	uint64_t *pml4;
 	void *kva;
 
+	ASSERT(page->kva != NULL);
+
 	pml4 = thread_current()->pml4;
-	kva = page->frame->kva;
+	kva = page->kva;
 
 	if (pml4_is_dirty(pml4, page->va)) {
 		file_page = &page->file;
@@ -102,6 +109,9 @@ static bool file_backed_swap_out(struct page *page) {
 		file_seek(file, ofs);
 		file_page->read_bytes = file_write(file, kva, read_bytes);
 	}
+
+	page->kva = NULL;
+
 	return true;
 }
 
@@ -118,7 +128,7 @@ static void file_backed_destroy(struct page *page) {
 		return;
 	}
 	pml4 = thread_current()->pml4;
-	kva = page->frame->kva;
+	kva = page->kva;
 	if (pml4_is_dirty(pml4, page->va)) {
 		file_page = &page->file;
 		file = file_page->file;
