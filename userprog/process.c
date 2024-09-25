@@ -356,17 +356,16 @@ void process_exit(void) {
 	/* Check this thread did process_init() */
 	if (curr->is_process) {
 		printf("%s: exit(%d)\n", curr->thread.name, curr->exist_status);
-		sema_up(&curr->exist_status_setted);
-
-		fd_close_all(*curr->fd_list);
-		palloc_free_page(curr->fd_list);
 	}
 	process_cleanup();
+	sema_up(&curr->exist_status_setted);
 #ifdef VM
 	spt_destroy(&curr->thread.spt);
 	mt_destroy(&curr->thread.mt);
 #endif
 	if (curr->is_process) {
+		fd_close_all(*curr->fd_list);
+		palloc_free_page(curr->fd_list);
 		sema_down(&curr->parent_waited);
 	}
 }
