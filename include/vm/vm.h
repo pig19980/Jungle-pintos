@@ -70,7 +70,6 @@ struct page {
 	struct hash_elem spt_elem;
 	struct list_elem page_elem;
 
-	struct lock page_lock; /* Lock for when copy content of this page */
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */
 	union {
@@ -83,7 +82,7 @@ struct page {
 	};
 };
 
-#define vm_writable(page) ((page)->writable || (page)->is_sharing)
+#define vm_writable(page) (((page)->writable) && !((page)->is_sharing))
 #define vm_on_phymem(page) (((page)->frame) != NULL)
 
 /* The representation of "frame" */
