@@ -394,7 +394,7 @@ void supplemental_page_table_init(struct supplemental_page_table *spt UNUSED) {
 
 static bool copy_page(struct page *dst_page, void *_aux) {
 	struct page *src_page = _aux;
-	void *kva = dst_page->frame->kva;
+	void *kva = dst_page->kva;
 	bool success = false;
 	ASSERT(dst_page->va == src_page->va);
 	lock_acquire(&src_page->page_lock);

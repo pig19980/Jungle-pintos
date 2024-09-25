@@ -773,7 +773,7 @@ static bool lazy_load_segment(struct page *page, void *aux) {
 	/* TODO: Load the segment from the file */
 	/* TODO: This called when the first page fault occurs on address VA. */
 	/* TODO: VA is available when calling this function. */
-	void *kva = page->frame->kva;
+	void *kva = page->kva;
 	struct vm_file_arg *arg = aux;
 
 	file_seek(arg->file, arg->ofs);
