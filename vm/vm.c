@@ -19,6 +19,8 @@ clock_t user_page_no;
 #define ctov(clock) ((void *)((user_start_page) + ((clock)*PGSIZE)))
 /* Convert kernal virtual address to clock index */
 #define vtoc(kva) ((clock_t)(pg_no((kva) - (user_start_page))))
+/* Convert kernal virtual address to frame pointer */
+#define vtof(kva) (frame_table + (vtoc(kva)))
 
 static uint64_t spt_hash_func(const struct hash_elem *, void *);
 static bool spt_less_func(const struct hash_elem *,
@@ -52,8 +54,8 @@ void vm_init(void) {
 		PANIC("frame table init fail");
 	}
 	for (clock_t idx = 0; idx < user_page_no; ++idx) {
-		frame_table[idx].kva = ctov(idx);
-		list_init(&(frame_table[idx].page_list));
+		(frame_table + idx)->kva = ctov(idx);
+		list_init(&((frame_table + idx)->page_list));
 	}
 	lock_init(&ft_lock);
 }
@@ -114,7 +116,6 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage,
 			break;
 		};
 		page->pml4 = thread_current()->pml4;
-		page->frame = NULL;
 		page->writable = writable;
 		page->is_sharing = false;
 		circular_init(&page->page_elem);
@@ -173,7 +174,7 @@ static struct frame *vm_get_victim(void) {
 	for (current_clock = next_clock(before_clock);
 		 current_clock != before_clock;
 		 current_clock = next_clock(before_clock)) {
-		victim = &frame_table[current_clock];
+		victim = frame_table + current_clock;
 		is_acessed = false;
 		for (page_elem = list_begin(&victim->page_list);
 			 page_elem != list_end(&victim->page_list);
@@ -191,7 +192,7 @@ static struct frame *vm_get_victim(void) {
 	}
 
 	before_clock = current_clock;
-	return &frame_table[current_clock];
+	return frame_table + current_clock;
 }
 
 /* Evict one page and return the corresponding frame.
@@ -220,8 +221,6 @@ static struct frame *vm_evict_frame(void) {
 
 		ASSERT(pml4_get_page(pml4, page->va) != NULL);
 
-		page->frame = NULL;
-
 		pml4_clear_page(pml4, page->va);
 	}
 	// set as circular list
@@ -244,7 +243,7 @@ static struct frame *vm_get_frame(void) {
 	kva = palloc_get_page(PAL_USER);
 	if (kva) {
 		new_clock = vtoc(kva);
-		frame = &frame_table[new_clock];
+		frame = frame_table + new_clock;
 		if (frame->kva != kva) {
 			ASSERT(frame->kva == kva);
 		}
@@ -285,7 +284,6 @@ static bool vm_handle_wp(struct page *page) {
 
 		swap_out(page);
 
-		page->frame = NULL;
 		pml4_clear_page(page->pml4, page->va);
 		circular_init(&page->page_elem);
 		return vm_do_claim_page(page);
@@ -332,7 +330,7 @@ void vm_dealloc_page(struct page *page) {
 
 	destroy(page);
 	if (vm_on_phymem(page)) {
-		frame = page->frame;
+		frame = vtof(page->kva);
 
 		list_remove(&page->page_elem);
 
@@ -370,7 +368,6 @@ static bool vm_do_claim_page(struct page *page) {
 	frame = vm_get_frame();
 	lock_release(&ft_lock);
 
-	page->frame = frame;
 	if (!swap_in(page, frame->kva)) {
 		PANIC("I don't wan to handdle swap in fail");
 	}
@@ -389,7 +386,7 @@ static bool vm_do_claim_page(struct page *page) {
 		list_push_back(&frame->page_list, &page->page_elem);
 	} else {
 		begin_elem = cur_elem = &page->page_elem;
-		frame = page->frame;
+		frame = vtof(page->kva);
 		for (cur_elem = list_begin(&frame->page_list);
 			 cur_elem != list_end(&frame->page_list);
 			 cur_elem = list_next(cur_elem)) {
@@ -451,9 +448,8 @@ static bool copy_page(struct page *dst_page, void *_aux) {
 			return false;
 		}
 	}
-	palloc_free_page(dst_page->frame->kva);
+	palloc_free_page(dst_page->kva);
 	dst_page->kva = src_page->kva;
-	dst_page->frame = src_page->frame;
 
 	ASSERT(src_page->kva ==
 		   pml4_get_page(src_page->pml4, va));

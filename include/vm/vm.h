@@ -59,9 +59,8 @@ struct thread;
  * DO NOT REMOVE/MODIFY PREDEFINED MEMBER OF THIS STRUCTURE. */
 struct page {
 	const struct page_operations *operations;
-	void *va;			 /* Address in terms of user space */
-	void *kva;			 /* Address in terms of kernel space */
-	struct frame *frame; /* Back reference for frame */
+	void *va;  /* Address in terms of user space */
+	void *kva; /* Address in terms of kernel space */
 
 	bool writable;
 	bool is_sharing;
@@ -83,7 +82,7 @@ struct page {
 };
 
 #define vm_writable(page) (((page)->writable) && !((page)->is_sharing))
-#define vm_on_phymem(page) (((page)->frame) != NULL)
+#define vm_on_phymem(page) (((page)->kva) != NULL)
 
 /* The representation of "frame" */
 struct frame {
