@@ -60,6 +60,7 @@ struct thread;
 struct page {
 	const struct page_operations *operations;
 	void *va;			 /* Address in terms of user space */
+	void *kva;			 /* Address in terms of kernel space */
 	struct frame *frame; /* Back reference for frame */
 
 	bool writable;
