@@ -81,7 +81,7 @@ static bool file_backed_swap_in(struct page *page, void *kva) {
 	memset(kva + read_bytes, 0, zero_bytes);
 
 	file_page->read_bytes = read_bytes;
-	page->kva = NULL;
+	page->kva = kva;
 
 	return true;
 }

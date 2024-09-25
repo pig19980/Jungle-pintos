@@ -42,6 +42,8 @@ static bool spt_less_func(const struct hash_elem *a,
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
 void vm_init(void) {
+	struct frame *frame;
+
 	vm_anon_init();
 	vm_file_init();
 #ifdef EFILESYS /* For project 4 */
@@ -54,8 +56,11 @@ void vm_init(void) {
 		PANIC("frame table init fail");
 	}
 	for (clock_t idx = 0; idx < user_page_no; ++idx) {
-		(frame_table + idx)->kva = ctov(idx);
-		list_init(&((frame_table + idx)->page_list));
+		frame = frame_table + idx;
+		frame->kva = ctov(idx);
+		frame->is_claiming = false;
+		list_init(&(frame->page_list));
+		lock_init(&(frame->frame_lock));
 	}
 	lock_init(&ft_lock);
 }
@@ -170,29 +175,60 @@ static struct frame *vm_get_victim(void) {
 	bool is_acessed;
 	uint64_t *pml4;
 
+	lock_acquire(&ft_lock);
 	current_clock = next_clock(before_clock);
 	for (current_clock = next_clock(before_clock);
 		 current_clock != before_clock;
-		 current_clock = next_clock(before_clock)) {
+		 current_clock = next_clock(current_clock)) {
 		victim = frame_table + current_clock;
+		lock_acquire(&victim->frame_lock);
+		if (victim->is_claiming) {
+			lock_release(&victim->frame_lock);
+			continue;
+		}
+
 		is_acessed = false;
 		for (page_elem = list_begin(&victim->page_list);
 			 page_elem != list_end(&victim->page_list);
 			 page_elem = list_next(page_elem)) {
 			page = list_entry(page_elem, struct page, page_elem);
 			pml4 = page->pml4;
+
 			if (pml4_is_accessed(pml4, page->va)) {
 				pml4_set_accessed(pml4, page->va, false);
 				is_acessed = true;
 			}
 		}
 		if (!is_acessed) {
-			break;
+			goto get_victim_done;
 		}
+		lock_release(&victim->frame_lock);
 	}
 
+	// If every frame is accessed and first frame is evicting
+	lock_acquire(&victim->frame_lock);
+	if (victim->is_claiming) {
+		lock_release(&victim->frame_lock);
+		while (true) {
+			current_clock = next_clock(current_clock);
+			victim = frame_table + current_clock;
+			lock_acquire(&victim->frame_lock);
+			if (!victim->is_claiming) {
+				goto get_victim_done;
+			}
+			lock_release(&victim->frame_lock);
+		}
+	}
+get_victim_done:
+	victim->is_claiming = true;
+	lock_release(&victim->frame_lock);
+
 	before_clock = current_clock;
-	return frame_table + current_clock;
+	lock_release(&ft_lock);
+
+	ASSERT(victim->is_claiming == true);
+
+	return victim;
 }
 
 /* Evict one page and return the corresponding frame.
@@ -207,8 +243,9 @@ static struct frame *vm_evict_frame(void) {
 
 	ASSERT(victim != NULL);
 
+	lock_acquire(&victim->frame_lock);
 	if (list_empty(&victim->page_list)) {
-		return victim;
+		goto evict_done;
 	}
 	for (page_elem = list_begin(&victim->page_list);
 		 page_elem != list_end(&victim->page_list);
@@ -227,6 +264,11 @@ static struct frame *vm_evict_frame(void) {
 	circular_make(&victim->page_list);
 
 	ASSERT(list_empty(&victim->page_list));
+evict_done:
+	lock_release(&victim->frame_lock);
+
+	ASSERT(victim->is_claiming == true);
+
 	return victim;
 }
 
@@ -240,19 +282,23 @@ static struct frame *vm_get_frame(void) {
 	void *kva;
 	clock_t new_clock;
 	/* TODO: Fill this function. */
+	lock_acquire(&ft_lock);
 	kva = palloc_get_page(PAL_USER);
 	if (kva) {
 		new_clock = vtoc(kva);
 		frame = frame_table + new_clock;
-		if (frame->kva != kva) {
-			ASSERT(frame->kva == kva);
-		}
+		frame->is_claiming = true;
+		lock_release(&ft_lock);
+
+		ASSERT(frame->kva == kva);
 	} else {
+		lock_release(&ft_lock);
 		frame = vm_evict_frame();
 	}
 
 	ASSERT(frame != NULL);
 	ASSERT(list_empty(&frame->page_list));
+	ASSERT(frame->is_claiming == true);
 	return frame;
 }
 
@@ -270,17 +316,20 @@ static void vm_stack_growth(void *addr) {
 
 /* Handle the fault on write_protected page */
 static bool vm_handle_wp(struct page *page) {
+	struct frame *frame;
+
 	if (!page->writable) {
 		return false;
 	}
 
 	ASSERT(page->is_sharing);
 
+	frame = vtof(page->kva);
 	page->is_sharing = false;
 	if (!circular_is_alone(&page->page_elem)) {
-		lock_acquire(&ft_lock);
+		lock_acquire(&frame->frame_lock);
 		list_remove(&page->page_elem);
-		lock_release(&ft_lock);
+		lock_release(&frame->frame_lock);
 
 		swap_out(page);
 
@@ -332,12 +381,14 @@ void vm_dealloc_page(struct page *page) {
 	if (vm_on_phymem(page)) {
 		frame = vtof(page->kva);
 
+		lock_acquire(&frame->frame_lock);
 		list_remove(&page->page_elem);
 
-		pml4_clear_page(page->pml4, page->va);
 		if (list_empty(&frame->page_list)) {
 			palloc_free_page(frame->kva);
 		}
+		lock_release(&frame->frame_lock);
+		pml4_clear_page(page->pml4, page->va);
 	}
 	free(page);
 }
@@ -371,14 +422,15 @@ static bool vm_do_claim_page(struct page *page) {
 			PANIC("I don't wan to handdle swap in fail");
 		}
 		frame = vtof(page->kva);
-	} else {
-		lock_acquire(&ft_lock);
-		frame = vm_get_frame();
-		lock_release(&ft_lock);
 
+		ASSERT(frame->is_claiming != true);
+	} else {
+		frame = vm_get_frame();
 		if (!swap_in(page, frame->kva)) {
 			PANIC("I don't wan to handdle swap in fail");
 		}
+
+		ASSERT(frame->is_claiming == true);
 	}
 
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
@@ -387,11 +439,14 @@ static bool vm_do_claim_page(struct page *page) {
 		pml4 = page->pml4;
 
 		ASSERT(pml4_get_page(pml4, page->va) == NULL);
+		ASSERT(page->kva == frame->kva);
 
 		if (!pml4_set_page(pml4, page->va, frame->kva, vm_writable(page))) {
 			PANIC("I don't wan to write cod about pml4 fail");
 		}
+		lock_acquire(&frame->frame_lock);
 		list_push_back(&frame->page_list, &page->page_elem);
+		lock_release(&frame->frame_lock);
 	} else {
 		for (cur_elem = list_begin(&frame->page_list);
 			 cur_elem != list_end(&frame->page_list);
@@ -408,7 +463,9 @@ static bool vm_do_claim_page(struct page *page) {
 			}
 		}
 	}
-
+	lock_acquire(&frame->frame_lock);
+	frame->is_claiming = false;
+	lock_release(&frame->frame_lock);
 	return true;
 }
 
@@ -422,7 +479,6 @@ void supplemental_page_table_init(struct supplemental_page_table *spt UNUSED) {
 static bool copy_page(struct page *dst_page, void *_aux) {
 	struct page *src_page = _aux;
 	void *va = dst_page->va;
-	struct list_elem *page_elem;
 
 	ASSERT(dst_page->va == src_page->va);
 
@@ -446,7 +502,7 @@ static bool copy_page(struct page *dst_page, void *_aux) {
 /* Copy supplemental page table from src to dst */
 bool supplemental_page_table_copy(struct supplemental_page_table *dst,
 								  struct supplemental_page_table *src) {
-	struct page *src_page;
+	struct page *src_page, *dst_page;
 	enum vm_type src_type;
 	void *src_va;
 	bool src_writable;
@@ -464,8 +520,9 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst,
 											copy_page, src_page)) {
 			return false;
 		}
-		spt_find_page(dst, src_va)->is_sharing = true;
-		if (!vm_claim_page(src_va)) {
+		dst_page = spt_find_page(dst, src_va);
+		dst_page->is_sharing = true;
+		if (!vm_do_claim_page(dst_page)) {
 			return false;
 		}
 	}
@@ -476,9 +533,7 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst,
 void supplemental_page_table_kill(struct supplemental_page_table *spt) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
-	lock_acquire(&ft_lock);
 	hash_clear(&spt->spt_hash, spt_destroy_func);
-	lock_release(&ft_lock);
 }
 
 /* Destroy supplemental page helper function */
