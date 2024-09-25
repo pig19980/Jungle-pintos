@@ -360,7 +360,7 @@ bool vm_claim_page(void *va) {
 static bool vm_do_claim_page(struct page *page) {
 	struct frame *frame;
 	uint64_t *pml4;
-	struct list_elem *begin_elem, *cur_elem, *next_elem;
+	struct list_elem *cur_elem;
 
 	ASSERT(!vm_on_phymem(page));
 
@@ -374,7 +374,6 @@ static bool vm_do_claim_page(struct page *page) {
 
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
 	/* Traversal circular list and add in pml4 */
-
 	if (circular_is_alone(&page->page_elem)) {
 		pml4 = page->pml4;
 
@@ -385,7 +384,6 @@ static bool vm_do_claim_page(struct page *page) {
 		}
 		list_push_back(&frame->page_list, &page->page_elem);
 	} else {
-		begin_elem = cur_elem = &page->page_elem;
 		frame = vtof(page->kva);
 		for (cur_elem = list_begin(&frame->page_list);
 			 cur_elem != list_end(&frame->page_list);
@@ -397,29 +395,10 @@ static bool vm_do_claim_page(struct page *page) {
 				if (!pml4_set_page(pml4, page->va, frame->kva, vm_writable(page))) {
 					PANIC("I don't wan to write cod about pml4 fail");
 				}
-				// /* Set links */
-				// list_push_back(&frame->page_list, &page->page_elem);
 			} else if (pml4_is_writable(pml4, page->va) != vm_writable(page)) {
 				pml4_set_writable(pml4, page->va, vm_writable(page));
 			}
 		}
-		// do {
-		// 	next_elem = list_next(cur_elem);
-		// 	page = list_entry(cur_elem, struct page, page_elem);
-		// 	pml4 = page->pml4;
-
-		// 	if (!pml4_get_page(pml4, page->va)) {
-		// 		if (!pml4_set_page(pml4, page->va, frame->kva, vm_writable(page))) {
-		// 			PANIC("I don't wan to write cod about pml4 fail");
-		// 		}
-		// 		// /* Set links */
-		// 		// list_push_back(&frame->page_list, &page->page_elem);
-		// 	} else if (pml4_is_writable(pml4, page->va) != vm_writable(page)) {
-		// 		pml4_set_writable(pml4, page->va, vm_writable(page));
-		// 	}
-
-		// 	cur_elem = next_elem;
-		// } while (cur_elem != begin_elem);
 	}
 
 	return true;
