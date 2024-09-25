@@ -21,6 +21,10 @@ clock_t user_page_no;
 #define vtoc(kva) ((clock_t)(pg_no((kva) - (user_start_page))))
 /* Convert kernal virtual address to frame pointer */
 #define vtof(kva) (frame_table + (vtoc(kva)))
+/* Convert frame pointer to clock index */
+#define ftoc(frame) ((clock_t)((struct frame *)(frame) - (frame_table)))
+/* Convert frame pointer to kernal virtual address */
+#define ftov(frame) ((ctov(ftoc(frame))))
 
 static uint64_t spt_hash_func(const struct hash_elem *, void *);
 static bool spt_less_func(const struct hash_elem *,
@@ -57,7 +61,6 @@ void vm_init(void) {
 	}
 	for (clock_t idx = 0; idx < user_page_no; ++idx) {
 		frame = frame_table + idx;
-		frame->kva = ctov(idx);
 		frame->is_claiming = false;
 		list_init(&(frame->page_list));
 		lock_init(&(frame->frame_lock));
@@ -289,8 +292,7 @@ static struct frame *vm_get_frame(void) {
 		frame = frame_table + new_clock;
 		frame->is_claiming = true;
 		lock_release(&ft_lock);
-
-		ASSERT(frame->kva == kva);
+		ASSERT(ftov(frame) == kva);
 	} else {
 		lock_release(&ft_lock);
 		frame = vm_evict_frame();
@@ -385,7 +387,7 @@ void vm_dealloc_page(struct page *page) {
 		list_remove(&page->page_elem);
 
 		if (list_empty(&frame->page_list)) {
-			palloc_free_page(frame->kva);
+			palloc_free_page(ftov(frame));
 		}
 		lock_release(&frame->frame_lock);
 		pml4_clear_page(page->pml4, page->va);
@@ -426,7 +428,7 @@ static bool vm_do_claim_page(struct page *page) {
 		ASSERT(frame->is_claiming != true);
 	} else {
 		frame = vm_get_frame();
-		if (!swap_in(page, frame->kva)) {
+		if (!swap_in(page, ftov(frame))) {
 			PANIC("I don't wan to handdle swap in fail");
 		}
 
@@ -439,9 +441,9 @@ static bool vm_do_claim_page(struct page *page) {
 		pml4 = page->pml4;
 
 		ASSERT(pml4_get_page(pml4, page->va) == NULL);
-		ASSERT(page->kva == frame->kva);
+		ASSERT(page->kva == ftov(frame));
 
-		if (!pml4_set_page(pml4, page->va, frame->kva, vm_writable(page))) {
+		if (!pml4_set_page(pml4, page->va, ftov(frame), vm_writable(page))) {
 			PANIC("I don't wan to write cod about pml4 fail");
 		}
 		lock_acquire(&frame->frame_lock);
@@ -455,7 +457,7 @@ static bool vm_do_claim_page(struct page *page) {
 			pml4 = page->pml4;
 
 			if (!pml4_get_page(pml4, page->va)) {
-				if (!pml4_set_page(pml4, page->va, frame->kva, vm_writable(page))) {
+				if (!pml4_set_page(pml4, page->va, ftov(frame), vm_writable(page))) {
 					PANIC("I don't wan to write cod about pml4 fail");
 				}
 			} else if (pml4_is_writable(pml4, page->va) != vm_writable(page)) {
