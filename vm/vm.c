@@ -364,12 +364,21 @@ static bool vm_do_claim_page(struct page *page) {
 
 	ASSERT(!vm_on_phymem(page));
 
-	lock_acquire(&ft_lock);
-	frame = vm_get_frame();
-	lock_release(&ft_lock);
+	/* Check called in supplemental_page_table_copy */
+	if (VM_TYPE(page->operations->type) == VM_UNINIT &&
+		page->is_sharing) {
+		if (!swap_in(page, NULL)) {
+			PANIC("I don't wan to handdle swap in fail");
+		}
+		frame = vtof(page->kva);
+	} else {
+		lock_acquire(&ft_lock);
+		frame = vm_get_frame();
+		lock_release(&ft_lock);
 
-	if (!swap_in(page, frame->kva)) {
-		PANIC("I don't wan to handdle swap in fail");
+		if (!swap_in(page, frame->kva)) {
+			PANIC("I don't wan to handdle swap in fail");
+		}
 	}
 
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
@@ -384,7 +393,6 @@ static bool vm_do_claim_page(struct page *page) {
 		}
 		list_push_back(&frame->page_list, &page->page_elem);
 	} else {
-		frame = vtof(page->kva);
 		for (cur_elem = list_begin(&frame->page_list);
 			 cur_elem != list_end(&frame->page_list);
 			 cur_elem = list_next(cur_elem)) {
@@ -413,13 +421,10 @@ void supplemental_page_table_init(struct supplemental_page_table *spt UNUSED) {
 
 static bool copy_page(struct page *dst_page, void *_aux) {
 	struct page *src_page = _aux;
-	void *kva = dst_page->kva, *va = dst_page->va;
+	void *va = dst_page->va;
 	struct list_elem *page_elem;
 
 	ASSERT(dst_page->va == src_page->va);
-
-	src_page->is_sharing = true;
-	dst_page->is_sharing = true;
 
 	if (!vm_on_phymem(src_page)) {
 		if (!vm_do_claim_page(src_page)) {
@@ -427,18 +432,19 @@ static bool copy_page(struct page *dst_page, void *_aux) {
 			return false;
 		}
 	}
-	palloc_free_page(dst_page->kva);
-	dst_page->kva = src_page->kva;
 
 	ASSERT(src_page->kva ==
 		   pml4_get_page(src_page->pml4, va));
+
+	dst_page->kva = src_page->kva;
+	src_page->is_sharing = true;
 
 	list_insert(&src_page->page_elem, &dst_page->page_elem);
 	return true;
 }
 
 /* Copy supplemental page table from src to dst */
-bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
+bool supplemental_page_table_copy(struct supplemental_page_table *dst,
 								  struct supplemental_page_table *src) {
 	struct page *src_page;
 	enum vm_type src_type;
@@ -458,6 +464,7 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 											copy_page, src_page)) {
 			return false;
 		}
+		spt_find_page(dst, src_va)->is_sharing = true;
 		if (!vm_claim_page(src_va)) {
 			return false;
 		}
