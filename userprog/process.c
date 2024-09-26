@@ -873,7 +873,7 @@ static bool setup_stack(struct intr_frame *if_) {
 	void *stack_bottom = (void *)(((uint8_t *)USER_STACK) - PGSIZE);
 	uint8_t *kpage;
 
-	if(!vm_alloc_page(VM_ANON, kpage, true)) {
+	if(!vm_alloc_page(VM_ANON, stack_bottom, true)) {
 		return success;
 	} else {
 		if_ -> rsp = USER_STACK;
