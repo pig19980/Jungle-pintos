@@ -869,16 +869,16 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
 (첫 스택 페이지는 지연적으로 할당될 필요가 없음.
 한 스택페이지만 만들어주면된다.)*/
 static bool setup_stack(struct intr_frame *if_) {
-	bool success = false;
 	void *stack_bottom = (void *)(((uint8_t *)USER_STACK) - PGSIZE);
 	uint8_t *kpage;
 
 	if(!vm_alloc_page(VM_ANON, stack_bottom, true)) {
-		return success;
+		return false;
 	} else {
 		if_ -> rsp = USER_STACK;
-		success = true;
 	}
+	if (!vm_claim_page(stack_bottom))
+		return false;
 		
 
 
@@ -891,7 +891,7 @@ static bool setup_stack(struct intr_frame *if_) {
 	 * TODO: 해당 페이지를 스택으로 표시해야 합니다. */
 	/* TODO: 여기에 코드를 작성하세요 */
 	
-	return success;
+	return true;
 }
 #endif /* VM */
 
