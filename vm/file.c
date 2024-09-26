@@ -73,15 +73,18 @@ static bool file_backed_swap_in(struct page *page, void *kva) {
 	file_page = &page->file;
 	file = file_page->file;
 	ofs = file_page->ofs;
-	read_bytes = file_page->read_bytes;
 
 	file_seek(file, ofs);
-	read_bytes = file_read(file, kva, read_bytes);
+	read_bytes = file_read(file, kva, file_page->read_bytes);
+	if (read_bytes != file_page->read_bytes) {
+		PANIC("In file swap in, read bytes is less than before\n"
+			  "before%d after%d",
+			  file_page->read_bytes, read_bytes);
+	}
 	zero_bytes = PGSIZE - read_bytes;
 	memset(kva + read_bytes, 0, zero_bytes);
 
-	file_page->read_bytes = read_bytes;
-	page->kva = NULL;
+	page->kva = kva;
 
 	return true;
 }
@@ -91,7 +94,7 @@ static bool file_backed_swap_out(struct page *page) {
 	struct file_page *file_page;
 	int32_t ofs;
 	struct file *file;
-	uint32_t read_bytes;
+	uint32_t write_bytes;
 	uint64_t *pml4;
 	void *kva;
 
@@ -104,10 +107,14 @@ static bool file_backed_swap_out(struct page *page) {
 		file_page = &page->file;
 		file = file_page->file;
 		ofs = file_page->ofs;
-		read_bytes = file_page->read_bytes;
 
 		file_seek(file, ofs);
-		file_page->read_bytes = file_write(file, kva, read_bytes);
+		write_bytes = file_write(file, kva, file_page->read_bytes);
+		if (write_bytes != file_page->read_bytes) {
+			PANIC("In file swap out, write bytes is less than before\n"
+				  "before%d after%d",
+				  file_page->read_bytes, write_bytes);
+		}
 	}
 
 	page->kva = NULL;

@@ -86,8 +86,9 @@ struct page {
 
 /* The representation of "frame" */
 struct frame {
-	void *kva;
 	struct list page_list;
+	struct lock frame_lock;
+	bool is_claiming;
 };
 
 /* The function table for page operations.
