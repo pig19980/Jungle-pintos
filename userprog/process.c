@@ -873,14 +873,14 @@ static bool setup_stack(struct intr_frame *if_) {
 	void *stack_bottom = (void *)(((uint8_t *)USER_STACK) - PGSIZE);
 	uint8_t *kpage;
 
-	kpage = palloc_get_page(PAL_USER | PAL_ZERO);
-	if (kpage != NULL) {
-		success = install_page(((uint8_t *)USER_STACK) - PGSIZE, kpage, true);
-		if (success)
-			if_->rsp = USER_STACK;
-		else
-			palloc_free_page(kpage);
+	if(!vm_alloc_page(VM_ANON, kpage, true)) {
+		return success;
+	} else {
+		if_ -> rsp = USER_STACK;
+		success = true;
 	}
+		
+
 
 	/* TODO: Map the stack on stack_bottom and claim the page immediately.
 	 * TODO: If success, set the rsp accordingly.
