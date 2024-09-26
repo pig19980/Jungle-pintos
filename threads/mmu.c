@@ -292,3 +292,25 @@ void pml4_set_accessed(uint64_t *pml4, const void *vpage, bool accessed) {
 			invlpg((uint64_t)vpage);
 	}
 }
+
+/* Returns true if the PTE for virtual page VPAGE in PML4 is writable.
+ * Returns false if PML4 contains no PTE for VPAGE. */
+bool pml4_is_writable(uint64_t *pml4, const void *vpage) {
+	uint64_t *pte = pml4e_walk(pml4, (uint64_t)vpage, false);
+	return pte != NULL && (*pte & PTE_W) != 0;
+}
+
+/* Set the writable bit to WRITABLE in the PTE for virtual page VPAGE
+ * in PML4. */
+void pml4_set_writable(uint64_t *pml4, const void *vpage, bool writable) {
+	uint64_t *pte = pml4e_walk(pml4, (uint64_t)vpage, false);
+	if (pte) {
+		if (writable)
+			*pte |= PTE_W;
+		else
+			*pte &= ~(uint32_t)PTE_W;
+
+		if (rcr3() == vtop(pml4))
+			invlpg((uint64_t)vpage);
+	}
+}

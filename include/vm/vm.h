@@ -2,6 +2,9 @@
 #define VM_VM_H
 #include <stdbool.h>
 #include "threads/palloc.h"
+#include <hash.h>
+
+typedef size_t clock_t;
 
 enum vm_type {
 	/* page not initialized */
@@ -24,17 +27,31 @@ enum vm_type {
 	VM_MARKER_END = (1 << 31),
 };
 
+/* Argument for when swap in page from file*/
+struct vm_file_arg {
+	struct file *file;
+	int32_t ofs;
+	uint32_t read_bytes;
+	uint32_t zero_bytes;
+};
+
+extern void *user_start_page;
+extern size_t user_page_no;
+
+#include "devices/disk.h"
 #include "vm/uninit.h"
 #include "vm/anon.h"
 #include "vm/file.h"
 #ifdef EFILESYS
 #include "filesys/page_cache.h"
 #endif
+#include "threads/synch.h"
 
 struct page_operations;
 struct thread;
 
 #define VM_TYPE(type) ((type)&7)
+#define SEC_WRITE_CNT (PGSIZE / DISK_SECTOR_SIZE)
 
 /* The representation of "page".
  * This is kind of "parent class", which has four "child class"es, which are
@@ -42,10 +59,15 @@ struct thread;
  * DO NOT REMOVE/MODIFY PREDEFINED MEMBER OF THIS STRUCTURE. */
 struct page {
 	const struct page_operations *operations;
-	void *va;			 /* Address in terms of user space */
-	struct frame *frame; /* Back reference for frame */
+	void *va;  /* Address in terms of user space */
+	void *kva; /* Address in terms of kernel space */
 
-	/* Your implementation */
+	bool writable;
+	bool is_sharing;
+	uint64_t *pml4;
+
+	struct hash_elem spt_elem;
+	struct list_elem page_elem;
 
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */
@@ -59,10 +81,14 @@ struct page {
 	};
 };
 
+#define vm_writable(page) (((page)->writable) && !((page)->is_sharing))
+#define vm_on_phymem(page) (((page)->kva) != NULL)
+
 /* The representation of "frame" */
 struct frame {
-	void *kva;
-	struct page *page;
+	struct list page_list;
+	struct lock frame_lock;
+	bool is_claiming;
 };
 
 /* The function table for page operations.
@@ -85,7 +111,9 @@ struct page_operations {
 /* Representation of current process's memory space.
  * We don't want to force you to obey any specific design for this struct.
  * All designs up to you for this. */
-struct supplemental_page_table {};
+struct supplemental_page_table {
+	struct hash spt_hash;
+};
 
 #include "threads/thread.h"
 void supplemental_page_table_init(struct supplemental_page_table *spt);
@@ -95,6 +123,8 @@ void supplemental_page_table_kill(struct supplemental_page_table *spt);
 struct page *spt_find_page(struct supplemental_page_table *spt, void *va);
 bool spt_insert_page(struct supplemental_page_table *spt, struct page *page);
 void spt_remove_page(struct supplemental_page_table *spt, struct page *page);
+
+void spt_destroy(struct supplemental_page_table *spt);
 
 void vm_init(void);
 bool vm_try_handle_fault(struct intr_frame *f, void *addr, bool user,

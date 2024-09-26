@@ -12,7 +12,7 @@
 
 struct process {
 	struct thread thread;
-	struct file *(*fd_list)[FDSIZE];
+	fd_list *fd_list;
 	int exist_status;
 	bool is_process;
 	struct list child_list;
@@ -21,8 +21,8 @@ struct process {
 	struct semaphore parent_waited;
 	/* Sema up when this process set exist status */
 	struct semaphore exist_status_setted;
-	/* Lock for accessing data of this process by other process*/
-	struct lock data_access_lock;
+	/* Lock for accessing child list of this process by other process*/
+	struct lock child_access_lock;
 	struct file *loaded_file; /* Opened file by this process */
 	unsigned magic;			  /* Detects stack overflow. */
 };
@@ -35,6 +35,8 @@ int process_exec(void *f_name);
 int process_wait(tid_t);
 void process_exit(void);
 void process_activate(struct thread *next);
+
+void exit_with_exit_status(int);
 
 struct process *process_current(void);
 

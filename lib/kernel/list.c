@@ -454,3 +454,25 @@ struct list_elem *list_min(struct list *list, list_less_func *less, void *aux) {
 	}
 	return min;
 }
+
+/* Initializes circular list as list elem go to self. */
+void circular_init(struct list_elem *elem) {
+	elem->next = elem;
+	elem->prev = elem;
+}
+
+/* Return true if circular list have only self. */
+bool circular_is_alone(struct list_elem *elem) {
+	return elem->next == elem;
+}
+
+/* Remove list from begin to end.
+   Make removed list as circular list */
+void circular_make(struct list *list) {
+	// make list empty
+	list_back(list)->next = list_begin(list);
+	list_begin(list)->prev = list_back(list);
+	// link head and tail and make circular list
+	list_head(list)->next = list_tail(list);
+	list_tail(list)->prev = list_head(list);
+}

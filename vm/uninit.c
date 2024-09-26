@@ -10,6 +10,10 @@
 
 #include "vm/vm.h"
 #include "vm/uninit.h"
+#include "userprog/process.h"
+#include "threads/mmu.h"
+#include <string.h>
+#include "threads/malloc.h"
 
 static bool uninit_initialize(struct page *page, void *kva);
 static void uninit_destroy(struct page *page);
@@ -30,7 +34,7 @@ void uninit_new(struct page *page, void *va, vm_initializer *init,
 
 	*page = (struct page){.operations = &uninit_ops,
 						  .va = va,
-						  .frame = NULL, /* no frame for now */
+						  .kva = NULL, /* no frame for now */
 						  .uninit = (struct uninit_page){
 							  .init = init,
 							  .type = type,
@@ -46,10 +50,23 @@ static bool uninit_initialize(struct page *page, void *kva) {
 	/* Fetch first, page_initialize may overwrite the values */
 	vm_initializer *init = uninit->init;
 	void *aux = uninit->aux;
+	bool sucess = false;
+	page->kva = kva;
 
 	/* TODO: You may need to fix this function. */
-	return uninit->page_initializer(page, uninit->type, kva) &&
-		   (init ? init(page, aux) : true);
+	if (uninit->page_initializer(page, uninit->type, kva)) {
+		if (init) {
+			sucess = init(page, aux);
+		} else {
+			memset(kva, 0, PGSIZE);
+			sucess = true;
+		}
+	}
+	if (sucess) {
+		return true;
+	} else {
+		return false;
+	}
 }
 
 /* Free the resources hold by uninit_page. Although most of pages are transmuted
@@ -60,4 +77,7 @@ static void uninit_destroy(struct page *page) {
 	struct uninit_page *uninit UNUSED = &page->uninit;
 	/* TODO: Fill this function.
 	 * TODO: If you don't have anything to do, just return. */
+	if (uninit->aux) {
+		free(uninit->aux);
+	}
 }

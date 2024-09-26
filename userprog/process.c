@@ -20,6 +20,7 @@
 #include "intrinsic.h"
 #ifdef VM
 #include "vm/vm.h"
+#include "threads/malloc.h"
 #endif
 #include "userprog/fd.h"
 
@@ -29,7 +30,7 @@ static void initd(void *f_name);
 static void __do_fork(void *);
 
 /* Struct for give argument to __do_fork */
-static struct process_fork_arg {
+struct process_fork_arg {
 	struct intr_frame *if_;
 	struct thread *parent;
 	struct semaphore fork_done;
@@ -49,7 +50,7 @@ static void process_init(void) {
 
 	// Free fd list except initial_thread
 	if (current->fd_list) {
-		fd_close_all(current->fd_list);
+		fd_close_all(*current->fd_list);
 	} else {
 		current->fd_list = palloc_get_page(PAL_ZERO);
 	}
@@ -64,13 +65,13 @@ void process_init_in_thread_init(struct process *new) {
 
 	sema_init(&new->parent_waited, 0);
 	sema_init(&new->exist_status_setted, 0);
-	lock_init(&new->data_access_lock);
+	lock_init(&new->child_access_lock);
 
 	list_init(&new->child_list);
 
-	lock_acquire(&current->data_access_lock);
+	lock_acquire(&current->child_access_lock);
 	list_push_back(&current->child_list, &new->child_elem);
-	lock_release(&current->data_access_lock);
+	lock_release(&current->child_access_lock);
 
 	return;
 }
@@ -83,7 +84,7 @@ void process_init_of_initial_thread(void) {
 
 	sema_init(&current->parent_waited, 1);
 	sema_init(&current->exist_status_setted, 0);
-	lock_init(&current->data_access_lock);
+	lock_init(&current->child_access_lock);
 
 	list_init(&current->child_list);
 
@@ -127,6 +128,7 @@ static void initd(void *f_name) {
 
 #ifdef VM
 	supplemental_page_table_init(&thread_current()->spt);
+	mmap_table_init(&thread_current()->mt);
 #endif
 
 	process_init();
@@ -145,7 +147,7 @@ tid_t process_fork(const char *name, struct intr_frame *if_) {
 	/* Clone current thread to new thread.*/
 	struct process_fork_arg fork_arg;
 	fork_arg.if_ = if_;
-	fork_arg.parent = process_current();
+	fork_arg.parent = thread_current();
 	sema_init(&fork_arg.fork_done, 0);
 
 	int tid = thread_create(name, PRI_DEFAULT, __do_fork, &fork_arg);
@@ -227,6 +229,7 @@ static void __do_fork(void *aux) {
 	supplemental_page_table_init(&current_thread->spt);
 	if (!supplemental_page_table_copy(&current_thread->spt, &parent_thread->spt))
 		goto error;
+	mmap_table_init(&current_thread->mt);
 #else
 	if (!pml4_for_each(parent_thread->pml4, duplicate_pte, parent_thread))
 		goto error;
@@ -263,9 +266,9 @@ error:
 	fork_arg->fork_result = TID_ERROR;
 	sema_up(&current_process->parent_waited);
 
-	lock_acquire(&parent_process->data_access_lock);
+	lock_acquire(&parent_process->child_access_lock);
 	list_remove(&current_process->child_elem);
-	lock_release(&parent_process->data_access_lock);
+	lock_release(&parent_process->child_access_lock);
 
 	sema_up(&fork_arg->fork_done);
 	thread_exit();
@@ -321,7 +324,7 @@ int process_wait(tid_t child_tid) {
 
 	current = process_current();
 	child = NULL;
-	lock_acquire(&current->data_access_lock);
+	lock_acquire(&current->child_access_lock);
 	for (child_elem = list_begin(&current->child_list);
 		 child_elem != list_end(&current->child_list);
 		 child_elem = list_next(child_elem)) {
@@ -332,7 +335,7 @@ int process_wait(tid_t child_tid) {
 			break;
 		}
 	}
-	lock_release(&current->data_access_lock);
+	lock_release(&current->child_access_lock);
 	if (!child) {
 		return -1;
 	}
@@ -353,23 +356,27 @@ void process_exit(void) {
 	/* Check this thread did process_init() */
 	if (curr->is_process) {
 		printf("%s: exit(%d)\n", curr->thread.name, curr->exist_status);
-		sema_up(&curr->exist_status_setted);
-
-		fd_close_all(curr->fd_list);
-		palloc_free_page(curr->fd_list);
 	}
 	process_cleanup();
+	sema_up(&curr->exist_status_setted);
+#ifdef VM
+	spt_destroy(&curr->thread.spt);
+	mt_destroy(&curr->thread.mt);
+#endif
 	if (curr->is_process) {
+		fd_close_all(*curr->fd_list);
+		palloc_free_page(curr->fd_list);
 		sema_down(&curr->parent_waited);
 	}
 }
 
 /* Free the current process's resources. */
 static void process_cleanup(void) {
-	struct process *curr = thread_current();
+	struct process *curr = process_current();
 
 #ifdef VM
 	supplemental_page_table_kill(&curr->thread.spt);
+	mmap_table_kill(&curr->thread.mt);
 #endif
 
 	uint64_t *pml4;
@@ -766,6 +773,17 @@ static bool lazy_load_segment(struct page *page, void *aux) {
 	/* TODO: Load the segment from the file */
 	/* TODO: This called when the first page fault occurs on address VA. */
 	/* TODO: VA is available when calling this function. */
+	void *kva = page->kva;
+	struct vm_file_arg *arg = aux;
+
+	file_seek(arg->file, arg->ofs);
+	if (file_read(arg->file, kva, arg->read_bytes) != (int)arg->read_bytes) {
+		free(aux);
+		return false;
+	}
+	memset(kva + arg->read_bytes, 0, arg->zero_bytes);
+	free(aux);
+	return true;
 }
 
 /* Loads a segment starting at offset OFS in FILE at address
@@ -785,6 +803,8 @@ static bool lazy_load_segment(struct page *page, void *aux) {
 static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
 						 uint32_t read_bytes, uint32_t zero_bytes,
 						 bool writable) {
+	struct vm_file_arg *arg;
+
 	ASSERT((read_bytes + zero_bytes) % PGSIZE == 0);
 	ASSERT(pg_ofs(upage) == 0);
 	ASSERT(ofs % PGSIZE == 0);
@@ -795,14 +815,22 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		 * and zero the final PAGE_ZERO_BYTES bytes. */
 		size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
 		size_t page_zero_bytes = PGSIZE - page_read_bytes;
+		arg = malloc(sizeof(struct vm_file_arg));
+		if (!arg) {
+			return false;
+		}
+		arg->file = file;
+		arg->ofs = ofs;
+		arg->read_bytes = page_read_bytes;
+		arg->zero_bytes = page_zero_bytes;
 
 		/* TODO: Set up aux to pass information to the lazy_load_segment. */
-		void *aux = NULL;
 		if (!vm_alloc_page_with_initializer(VM_ANON, upage, writable,
-											lazy_load_segment, aux))
+											lazy_load_segment, arg))
 			return false;
 
 		/* Advance. */
+		ofs += page_read_bytes;
 		read_bytes -= page_read_bytes;
 		zero_bytes -= page_zero_bytes;
 		upage += PGSIZE;
@@ -812,15 +840,21 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
 
 /* Create a PAGE of stack at the USER_STACK. Return true on success. */
 static bool setup_stack(struct intr_frame *if_) {
-	bool success = false;
 	void *stack_bottom = (void *)(((uint8_t *)USER_STACK) - PGSIZE);
 
 	/* TODO: Map the stack on stack_bottom and claim the page immediately.
 	 * TODO: If success, set the rsp accordingly.
 	 * TODO: You should mark the page is stack. */
 	/* TODO: Your code goes here */
+	if (!vm_alloc_page(VM_ANON, stack_bottom, true)) {
+		return false;
+	}
+	if (!vm_claim_page(stack_bottom)) {
+		return false;
+	}
+	if_->rsp = USER_STACK;
 
-	return success;
+	return true;
 }
 #endif /* VM */
 
@@ -832,4 +866,12 @@ struct process *process_current(void) {
 	ASSERT(p->thread.status == THREAD_RUNNING);
 
 	return p;
+}
+
+void exit_with_exit_status(int status) {
+	struct process *curr;
+	curr = process_current();
+	curr->exist_status = status;
+	thread_exit();
+	NOT_REACHED();
 }

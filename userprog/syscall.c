@@ -12,10 +12,14 @@
 #include "userprog/process.h"
 #include <string.h>
 #include "threads/palloc.h"
+#include "filesys/filesys.h"
+#ifdef VM
+#include "vm/file.h"
+#endif
 
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
-void syscall_check_vaddr(uint64_t, struct process *);
+void syscall_check_vaddr(struct intr_frame *, uint64_t, bool);
 
 /* System call.
  *
@@ -42,13 +46,17 @@ void syscall_init(void) {
 			  FLAG_IF | FLAG_TF | FLAG_DF | FLAG_IOPL | FLAG_AC | FLAG_NT);
 }
 
-void syscall_check_vaddr(uint64_t va, struct process *curr) {
-	int temp;
+void syscall_check_vaddr(struct intr_frame *f, uint64_t va, bool write) {
 	if (!is_user_vaddr(va)) {
-		curr->exist_status = -1;
-		thread_exit();
+		exit_with_exit_status(-1);
 	}
-	temp = *(int *)va;
+#ifndef VM
+	int temp = *(int *)va;
+#else
+	if (!vm_try_handle_fault(f, (void *)va, true, write, false)) {
+		exit_with_exit_status(-1);
+	}
+#endif
 	return;
 }
 
@@ -69,52 +77,50 @@ void syscall_handler(struct intr_frame *f) {
 		NOT_REACHED();
 		break;
 	case SYS_EXIT:
-		current->exist_status = f->R.rdi;
-		thread_exit();
+		exit_with_exit_status(f->R.rdi);
 		NOT_REACHED();
 		break;
 	case SYS_FORK:
-		syscall_check_vaddr(f->R.rdi, current);
+		syscall_check_vaddr(f, f->R.rdi, false);
 		f->R.rax = process_fork((void *)f->R.rdi, f);
 		break;
 	case SYS_EXEC:
-		syscall_check_vaddr(f->R.rdi, current);
+		syscall_check_vaddr(f, f->R.rdi, false);
 
-		char *fn_copy, *temp_ptr;
+		char *fn_copy;
 		fn_copy = palloc_get_page(0);
 		if (fn_copy == NULL) {
-			current->exist_status = -1;
-			thread_exit();
+			exit_with_exit_status(-1);
 		}
-		strlcpy(fn_copy, f->R.rdi, PGSIZE);
+		strlcpy(fn_copy, (void *)f->R.rdi, PGSIZE);
 
-		current->exist_status = process_exec(fn_copy);
-		thread_exit();
+		exit_with_exit_status(process_exec(fn_copy));
+		NOT_REACHED();
 		break;
 	case SYS_WAIT:
 		f->R.rax = process_wait(f->R.rdi);
 		break;
 	case SYS_CREATE:
-		syscall_check_vaddr(f->R.rdi, current);
+		syscall_check_vaddr(f, f->R.rdi, false);
 		f->R.rax = filesys_create((void *)f->R.rdi, f->R.rsi);
 		break;
 	case SYS_REMOVE:
-		syscall_check_vaddr(f->R.rdi, current);
+		syscall_check_vaddr(f, f->R.rdi, false);
 		f->R.rax = filesys_remove((void *)f->R.rdi);
 		break;
 	case SYS_OPEN:
-		syscall_check_vaddr(f->R.rdi, current);
+		syscall_check_vaddr(f, f->R.rdi, false);
 		f->R.rax = fd_open((void *)f->R.rdi, *current->fd_list);
 		break;
 	case SYS_FILESIZE:
 		f->R.rax = fd_filesize(f->R.rdi, *current->fd_list);
 		break;
 	case SYS_READ:
-		syscall_check_vaddr(f->R.rsi, current);
+		syscall_check_vaddr(f, f->R.rsi, true);
 		f->R.rax = fd_read(f->R.rdi, (void *)f->R.rsi, f->R.rdx, *current->fd_list);
 		break;
 	case SYS_WRITE:
-		syscall_check_vaddr(f->R.rsi, current);
+		syscall_check_vaddr(f, f->R.rsi, false);
 		f->R.rax = fd_write(f->R.rdi, (void *)f->R.rsi, f->R.rdx, *current->fd_list);
 		break;
 	case SYS_SEEK:
@@ -129,12 +135,16 @@ void syscall_handler(struct intr_frame *f) {
 	case SYS_DUP2:
 		f->R.rax = fd_dup2(f->R.rdi, f->R.rsi, *current->fd_list);
 		break;
-
-	// Projects 3 syscall
+#ifdef VM
 	case SYS_MMAP:
+		f->R.rax = (uint64_t)do_mmap((void *)f->R.rdi, f->R.rsi, f->R.rdx,
+									 fd_get_file(f->R.r10, *current->fd_list), f->R.r8);
+		break;
 	case SYS_MUNMAP:
-
-	// Projects 4 syscall
+		do_munmap((void *)f->R.rdi);
+		break;
+#endif
+#ifdef EFILESYS
 	case SYS_CHDIR:
 	case SYS_MKDIR:
 	case SYS_READDIR:
@@ -143,8 +153,9 @@ void syscall_handler(struct intr_frame *f) {
 	case SYS_SYMLINK:
 	case SYS_MOUNT:
 	case SYS_UMOUNT:
+#endif
 	default:
 		printf("system call %lld not maid\n", f->R.rax);
-		thread_exit();
+		exit_with_exit_status(-1);
 	}
 }

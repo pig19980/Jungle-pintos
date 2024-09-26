@@ -1,12 +1,14 @@
 #include "userprog/fd.h"
 #include <stddef.h>
 #include "filesys/filesys.h"
+#include <stdio.h>
+#include "devices/input.h"
 
-static bool check_fd(int fd) {
-	if (0 <= fd && fd < FDSIZE)
-		return true;
+struct file *fd_get_file(int fd, fd_list fd_list) {
+	if (fd < 0 || fd >= FDSIZE)
+		return NULL;
 	else
-		return false;
+		return fd_list[fd];
 }
 
 int fd_open(const char *file, fd_list fd_list) {
@@ -30,10 +32,10 @@ int fd_filesize(int fd, fd_list fd_list) {
 	struct file *file;
 	int ret;
 
-	if (!check_fd(fd)) {
+	file = fd_get_file(fd, fd_list);
+	if (!file) {
 		return 0;
 	}
-
 	file = fd_list[fd];
 	if (!file || file == stdin || file == stdout) {
 		return 0;
@@ -46,15 +48,15 @@ int fd_read(int fd, void *buffer, unsigned size, fd_list fd_list) {
 	struct file *file;
 	int ret;
 
-	if (!check_fd(fd)) {
+	file = fd_get_file(fd, fd_list);
+	if (!file) {
 		return 0;
 	}
-	file = fd_list[fd];
 	if (file == NULL || file == stdout) {
 		return 0;
 	} else if (file == stdin) {
 		for (unsigned got = 0; got < size; ++got) {
-			input_getc(buffer + got);
+			*(uint8_t *)(buffer + got) = input_getc();
 		}
 		return size;
 	} else {
@@ -67,10 +69,10 @@ int fd_write(int fd, const void *buffer, unsigned size, fd_list fd_list) {
 	struct file *file;
 	int ret;
 
-	if (!check_fd(fd)) {
+	file = fd_get_file(fd, fd_list);
+	if (!file) {
 		return 0;
 	}
-	file = fd_list[fd];
 	if (file == NULL || file == stdin) {
 		return 0;
 	} else if (file == stdout) {
@@ -84,12 +86,11 @@ int fd_write(int fd, const void *buffer, unsigned size, fd_list fd_list) {
 
 void fd_seek(int fd, unsigned position, fd_list fd_list) {
 	struct file *file;
-	int ret;
 
-	if (!check_fd(fd)) {
-		return 0;
+	file = fd_get_file(fd, fd_list);
+	if (!file) {
+		return;
 	}
-	file = fd_list[fd];
 	if (!file || file == stdin || file == stdout) {
 		return;
 	}
@@ -98,12 +99,11 @@ void fd_seek(int fd, unsigned position, fd_list fd_list) {
 
 unsigned fd_tell(int fd, fd_list fd_list) {
 	struct file *file;
-	int ret;
 
-	if (!check_fd(fd)) {
+	file = fd_get_file(fd, fd_list);
+	if (!file) {
 		return 0;
 	}
-	file = fd_list[fd];
 	if (!file || file == stdin || file == stdout) {
 		return 0;
 	}
@@ -112,12 +112,11 @@ unsigned fd_tell(int fd, fd_list fd_list) {
 
 void fd_close(int fd, fd_list fd_list) {
 	struct file *file;
-	int ret;
 
-	if (!check_fd(fd)) {
-		return 0;
+	file = fd_get_file(fd, fd_list);
+	if (!file) {
+		return;
 	}
-	file = fd_list[fd];
 	if (file == stdin || file == stdout) {
 		fd_list[fd] = NULL;
 	} else if (file) {
@@ -129,7 +128,8 @@ void fd_close(int fd, fd_list fd_list) {
 int fd_dup2(int oldfd, int newfd, fd_list fd_list) {
 	struct file *oldfile, *newfile;
 
-	if (!check_fd(oldfd) || !check_fd(newfd)) {
+	if (oldfd < 0 || oldfd >= FDSIZE ||
+		newfd < 0 || newfd >= FDSIZE) {
 		return -1;
 	}
 	oldfile = fd_list[oldfd];
