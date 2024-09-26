@@ -143,10 +143,14 @@ static struct frame *vm_evict_frame(void) {
  * 가져온다. 유저 메모리 풀에서 페이지를 성공적으로 가져오면, 프레임을 할당하고 
  * 프레임 구조체의 멤버들을 초기화한 후 해당 프레임을 반환한다.)*/
 static struct frame *vm_get_frame(void) {
-	struct frame *frame = NULL;
+	struct frame *frame;
 	/* TODO: Fill this function. */
 	//PANIC("todo")
+	frame = malloc(sizeof(struct frame));
 	frame -> kva = palloc_get_page(PAL_USER);
+	if (frame->kva == NULL) {
+		PANIC("todo: need evict frame and return that frame");
+	}
 	frame -> page = NULL;
 	ASSERT(frame != NULL);
 	ASSERT(frame->page == NULL);
@@ -186,8 +190,12 @@ void vm_dealloc_page(struct page *page) {
 인자로 갖는 vm_do_claim_page라는 함수를 호출
 해야 한다.)*/
 bool vm_claim_page(void *va UNUSED) {
-	struct page *page = NULL;
+	struct page *page;
 	/* TODO: Fill this function */
+	page = palloc_get_page(PAL_USER);
+	page -> va = va;
+
+
 
 	return vm_do_claim_page(page);
 }
@@ -207,9 +215,8 @@ static bool vm_do_claim_page(struct page *page) {
 
 	/* TODO: Insert page table entry to map page's VA to frame's PA. 
 	(페이지 테이블 항목을 삽입하여 페이지의 VA를 프레임의 PA에 매핑합니다.)*/
-	page -> frame -> kva = frame -> kva;
-	frame -> page -> va = page -> va;
-	//pml4_set_page()
+
+	pml4_set_page(page, page -> va, frame -> kva, );
 
 	return swap_in(page, frame->kva);
 }
