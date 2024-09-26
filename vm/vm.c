@@ -210,13 +210,12 @@ static bool vm_do_claim_page(struct page *page) {
 	struct frame *frame = vm_get_frame();
 
 	/* Set links */
-	frame->page = page;
-	page->frame = frame;
 
 	/* TODO: Insert page table entry to map page's VA to frame's PA. 
 	(페이지 테이블 항목을 삽입하여 페이지의 VA를 프레임의 PA에 매핑합니다.)*/
 
-	pml4_set_page(page, page -> va, frame -> kva, );
+	if (!pml4_set_page(&page -> pml4, page -> va, frame -> kva, true))
+		return false;
 
 	return swap_in(page, frame->kva);
 }
