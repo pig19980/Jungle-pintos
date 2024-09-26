@@ -81,7 +81,7 @@ int main(void) {
 	console_init();
 
 	/* Initialize memory system. */
-	mem_end = palloc_init();
+	mem_end = palloc_init();	//physical memory을 여기까지 읽었기때문에 메모리를 어디서부터 어디까지 쓸수있는지 정함 
 	malloc_init();
 	paging_init(mem_end);
 

@@ -49,6 +49,7 @@ struct page {
 	struct frame *frame; /* Back reference for frame(물리 메모리 페이지를 가리킴) */
 
 	/* Your implementation */
+	struct hash_elem hash_elem;
 
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union 
@@ -72,6 +73,10 @@ struct frame {
 	void *kva;	//커널 가상 주소
 	struct page *page;	// 페이지 구조체를 담기 위한 멤버
 };
+
+// struct frame_table {
+// 	hash *frame_table;
+// }
 
 /* The function table for page operations.
  * This is one way of implementing "interface" in C.

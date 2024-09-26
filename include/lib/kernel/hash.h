@@ -34,7 +34,10 @@ struct hash_elem {
  * the structure that HASH_ELEM is embedded inside.  Supply the
  * name of the outer structure STRUCT and the member name MEMBER
  * of the hash element.  See the big comment at the top of the
- * file for an example. */
+ * file for an example. 
+ * (포인터 hash element인 HASH_ELEM을 HASH_ELEM이 포함된 구조체에 대한 
+ * 포인터로 변환합니다. 외부 구조체의 이름 STRUCT와 해시 요소의 멤버 이름 MEMBER를 
+ * 제공해야 합니다. 예시는 파일 상단의 큰 주석을 참고하세요. )*/
 #define hash_entry(HASH_ELEM, STRUCT, MEMBER)        \
 	((STRUCT *)((uint8_t *)&(HASH_ELEM)->list_elem - \
 				offsetof(STRUCT, MEMBER.list_elem)))
@@ -50,7 +53,8 @@ typedef bool hash_less_func(const struct hash_elem *a,
 							const struct hash_elem *b, void *aux);
 
 /* Performs some operation on hash element E, given auxiliary
- * data AUX. */
+ * data AUX. 
+ (요소에 대해 caller가 선택한 어떤 작업을 수행한다.)*/
 typedef void hash_action_func(struct hash_elem *e, void *aux);
 
 /* Hash table. */

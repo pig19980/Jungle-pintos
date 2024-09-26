@@ -3,9 +3,13 @@
 #include "threads/malloc.h"
 #include "vm/vm.h"
 #include "vm/inspect.h"
+#include "kernel/hash.h"
+#include "threads/mmu.h"
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
- * intialize codes. */
+ * intialize codes. 
+ (각 하위 시스템을 호출하여 가상 메모리 하위 시스템을 초기화한다.
+ 코드를 초기화한다.)*/
 void vm_init(void) {
 	vm_anon_init();
 	vm_file_init();
@@ -15,6 +19,7 @@ void vm_init(void) {
 	register_inspect_intr();
 	/* DO NOT MODIFY UPPER LINES. */
 	/* TODO: Your code goes here. */
+	
 }
 
 /* Get the type of the page. This function is useful if you want to know the
@@ -58,19 +63,16 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage,
 		 * TODO: should modify the field after calling the uninit_new.
 		 * (TODO: 페이지를 생성하고, VM 유형에 따라 초기화 함수를 가져온 후,
          * TODO: uninit_new를 호출하여 "uninit" 페이지 구조체를 생성하세요.
-         * TODO: uninit_new 호출 후 필드를 수정해야 합니다.) 
-		 * spt 안에 삽입하는 것은 왜 안해 ? 
-		 * success TRUE로 리턴을 안해준다*/
-		struct page *p = palloc_get_page(PAL_USER);
+         * TODO: uninit_new 호출 후 필드를 수정해야 합니다.)  */
+		struct page *p = (struct page*)malloc(sizeof(struct page));
 		if (type == VM_ANON) 
 			uninit_new(p, p -> va, init, VM_UNINIT, aux, anon_initializer);
 		else if (type == VM_FILE)
 			uninit_new(p, p -> va, init, VM_UNINIT, aux, file_backed_initializer);
-
-
-
+		
 		/* TODO: Insert the page into the spt.
 		(페이지를 spt에 삽입하세요.) */
+		spt_insert_page(spt, p);
 	}
 	return success = true;
 err:
@@ -82,10 +84,18 @@ err:
 대응되는 페이지 구조체를 찾아서 반환한다. 실패했을 경우 NULL을 반환한다.)*/
 struct page *spt_find_page(struct supplemental_page_table *spt UNUSED,
 						   void *va UNUSED) {
-	struct page *page = NULL;
+	struct page page;
 	/* TODO: Fill this function. */
+	struct hash_elem *e;
+	/* 
+	예로 page fault 발생 시 크기가 페이지 크기보다 작을 경우 페이지 단위 크기만큼 불러야 하기 때문에
+	round_down을 해서 page의 크기만큼 크기를 조정.
+	*/
+	page.va = pg_round_down(va);
 
-	return page;
+	e = hash_find(&spt -> spt_hash, &page.hash_elem);
+
+	return e != NULL ? hash_entry(e, struct page, hash_elem) : NULL;
 }
 
 /* Insert PAGE into spt with validation.
@@ -96,7 +106,10 @@ bool spt_insert_page(struct supplemental_page_table *spt UNUSED,
 					 struct page *page UNUSED) {
 	int succ = false;
 	/* TODO: Fill this function. */
-
+	
+	page -> va = hash_insert(&spt -> spt_hash, &page -> hash_elem);
+	if (page -> va != NULL)
+		succ = true;
 	return succ;
 }
 
@@ -122,7 +135,7 @@ static struct frame *vm_evict_frame(void) {
 	return NULL;
 }
 
-/* palloc() and get frame. If there is no available page, evict the page
+/* palloc() and get frame. If there is no avialable page, evict the page
  * and return it. This always return valid address. That is, if the user pool
  * memory is full, this function evicts the frame to get the available memory
  * space.
@@ -133,6 +146,8 @@ static struct frame *vm_get_frame(void) {
 	struct frame *frame = NULL;
 	/* TODO: Fill this function. */
 	//PANIC("todo")
+	frame -> kva = palloc_get_page(PAL_USER);
+	frame -> page = NULL;
 	ASSERT(frame != NULL);
 	ASSERT(frame->page == NULL);
 	return frame;
@@ -190,16 +205,38 @@ static bool vm_do_claim_page(struct page *page) {
 	frame->page = page;
 	page->frame = frame;
 
-	/* TODO: Insert page table entry to map page's VA to frame's PA. */
+	/* TODO: Insert page table entry to map page's VA to frame's PA. 
+	(페이지 테이블 항목을 삽입하여 페이지의 VA를 프레임의 PA에 매핑합니다.)*/
+	page -> frame -> kva = frame -> kva;
+	frame -> page -> va = page -> va;
+	//pml4_set_page()
 
 	return swap_in(page, frame->kva);
+}
+
+unsigned
+page_hash (const struct hash_elem *p_, void *aux UNUSED) {
+  const struct page *p = hash_entry (p_, struct page, hash_elem);
+  return hash_bytes (&p->va, sizeof p->va);
+}
+
+bool
+page_less (const struct hash_elem *a_,
+           const struct hash_elem *b_, void *aux UNUSED) {
+  const struct page *a = hash_entry (a_, struct page, hash_elem);
+  const struct page *b = hash_entry (b_, struct page, hash_elem);
+
+  return a->va < b->va;
 }
 
 /* Initialize new supplemental page table 
 (보조 페이지 테이블을 초기화합니다. 보조 페이지 테이블을 어떤 자료 구조로 구현할지 선택하세요.
 userprog/process.c의 initd 함수로 새로운 프로세스가 시작하거나 process.c의 __do_fork로 자식
 프로세스가 생성될 때 위의 함수가 호출된다.)*/
-void supplemental_page_table_init(struct supplemental_page_table *spt UNUSED) {}
+void supplemental_page_table_init(struct supplemental_page_table *spt UNUSED) {
+	if(!hash_init(&spt -> spt_hash, page_hash, page_less, NULL))
+		PANIC("spt panic!");
+}
 
 /* Copy supplemental page table from src to dst 
 (src부터 dst까지 supplemental page table을 복사하세요.

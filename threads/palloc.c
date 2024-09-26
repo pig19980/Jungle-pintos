@@ -75,7 +75,8 @@ struct area {
 #define ACPI_RECLAIMABLE 3
 #define APPEND_HILO(hi, lo) (((uint64_t)((hi)) << 32) + (lo))
 
-/* Iterate on the e820 entry, parse the range of basemem and extmem. */
+/* Iterate on the e820 entry, parse the range of basemem and extmem. 
+(e820 항목을 반복하고 기본값과 확장값의 범위를 구문 분석합니다.)*/
 static void resolve_area_info(struct area *base_mem, struct area *ext_mem) {
 	struct multiboot_info *mb_info = ptov(MULTIBOOT_INFO);
 	struct e820_entry *entries = ptov(mb_info->mmap_base);
@@ -289,7 +290,13 @@ void *palloc_get_multiple(enum palloc_flags flags, size_t page_cnt) {
    otherwise from the kernel pool.  If PAL_ZERO is set in FLAGS,
    then the page is filled with zeros.  If no pages are
    available, returns a null pointer, unless PAL_ASSERT is set in
-   FLAGS, in which case the kernel panics. */
+   FLAGS, in which case the kernel panics. 
+   하나의 빈 페이지를 얻어 그 페이지의 커널 가상 주소를 반환합니다.
+만약 PAL_USER가 설정되어 있으면, 페이지는 **사용자 풀(user pool)**에서 얻어지며,
+그렇지 않으면 **커널 풀(kernel pool)**에서 가져옵니다. FLAGS에 PAL_ZERO가 
+설정되어 있으면, 페이지는 0으로 채워집니다. 만약 페이지가 자리가 없다면 null 
+포인터를 반환합니다. 하지만 PAL_ASSERT가 FLAGS에 설정되어 있으면, 커널은 
+패닉(panic) 상태에 빠집니다.*/
 void *palloc_get_page(enum palloc_flags flags) {
 	return palloc_get_multiple(flags, 1);
 }

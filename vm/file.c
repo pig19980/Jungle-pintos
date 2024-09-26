@@ -14,7 +14,9 @@ static const struct page_operations file_ops = {
 	.type = VM_FILE,
 };
 
-/* The initializer of file vm */
+/* The initializer of file vm 
+(파일 지원 페이지 하위시스템을 초기화한다. 이 기능에서는
+파일 백업 페이지와 관련된 모든 것을 설정할 수 있다.)*/
 void vm_file_init(void) {}
 
 /* Initialize the file backed page */
