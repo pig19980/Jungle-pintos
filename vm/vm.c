@@ -263,7 +263,18 @@ dst의 supplemental page table의 엔트리의 정확한 복사본을
 만드세요. 당신은 초기화되지 않은(uninit)페이지를 할당하고
 그것들을 바로 요청할 필요가 있을 것이다.)*/
 bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
-								  struct supplemental_page_table *src UNUSED) {}
+								  struct supplemental_page_table *src UNUSED) {
+	struct page *src_page;
+	enum vm_type src_type;
+	bool writable;
+	struct hash_iterator src_hash;
+	hash_first(&src_hash, &src -> spt_hash);
+	while(hash_next(&src_hash)) {
+		src_page = hash_entry(hash_cur(&src_hash), struct page, &src -> spt_hash)
+	}
+
+
+								  }
 
 /* Free the resource hold by the supplemental page table
 (supplemental page table에 의해 유지되던 모든 자원들을

@@ -214,7 +214,7 @@ void hash_first(struct hash_iterator *i, struct hash *h) {
    iterators. 
    (hash_next()에 의해 리턴된 값 중 가장 최근 값을 리턴한다. hash_first()
    로 iterator를 초기화 하고 나서 최초의 hash_next()를 호출하기 전에 
-   hash_cur()를 호출하는 것은 undefined behavior입니다.)*/
+   hash_cur()를 호출하는 것은 정의되지 않은 행동입니다.)*/
 struct hash_elem *hash_next(struct hash_iterator *i) {
 	ASSERT(i != NULL);
 
