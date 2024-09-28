@@ -18,6 +18,7 @@
 #include "threads/mmu.h"
 #include "threads/vaddr.h"
 #include "intrinsic.h"
+#include "threads/malloc.h"
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -803,6 +804,25 @@ static bool lazy_load_segment(struct page *page, void *aux) {
 	/* TODO: Load the segment from the file */
 	/* TODO: This called when the first page fault occurs on address VA. */
 	/* TODO: VA is available when calling this function. */
+	struct lazy_aux *lazy_aux = aux;
+	void *kva = page -> frame -> kva;
+
+	uint32_t lazy_read_bytes = lazy_aux -> read_bytes;
+	uint32_t lazy_zero_bytes = lazy_aux -> zero_bytes;
+	struct file *lazy_file = lazy_aux -> file;
+	off_t lazy_ofs = lazy_aux -> ofs;
+
+	file_seek(lazy_file, lazy_ofs);
+
+	if (file_read(lazy_file, kva, lazy_read_bytes) != (int)lazy_read_bytes) {
+		free(aux);
+		return false;
+	}
+	memset(kva + lazy_read_bytes, 0, lazy_zero_bytes);
+	free(aux);
+	return true;
+
+
 }
 
 /* Loads a segment starting at offset OFS in FILE at address
@@ -847,8 +867,8 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		만약 kpage가 NULL이 된다면 lazy_load_segment를 실행 그러므로 아래 실행 ?*/
 		// void *aux = NULL;
 		struct lazy_aux *aux = (struct lazy_aux*)malloc(sizeof(struct lazy_aux));
-		aux -> read_bytes = read_bytes;
-		aux -> zero_bytes = zero_bytes;
+		aux -> read_bytes = page_read_bytes;
+		aux -> zero_bytes = page_zero_bytes;
 		aux -> file = file;
 		aux -> ofs = ofs;
 		if (!vm_alloc_page_with_initializer(VM_ANON, upage, writable,
@@ -860,6 +880,7 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		read_bytes -= page_read_bytes;
 		zero_bytes -= page_zero_bytes;
 		upage += PGSIZE;
+		ofs += PGSIZE;
 	}
 	return true;
 }
@@ -872,16 +893,13 @@ static bool setup_stack(struct intr_frame *if_) {
 	void *stack_bottom = (void *)(((uint8_t *)USER_STACK) - PGSIZE);
 	uint8_t *kpage;
 
-	if(!vm_alloc_page(VM_ANON, stack_bottom, true)) {
+	if(!vm_alloc_page(VM_ANON, stack_bottom, true)) 
 		return false;
-	} else {
-		if_ -> rsp = USER_STACK;
-	}
 	if (!vm_claim_page(stack_bottom))
 		return false;
 		
 
-
+	if_ -> rsp = USER_STACK;
 	/* TODO: Map the stack on stack_bottom and claim the page immediately.
 	 * TODO: If success, set the rsp accordingly.
 	 * TODO: You should mark the page is stack. */
