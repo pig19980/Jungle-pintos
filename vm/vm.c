@@ -266,11 +266,17 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 								  struct supplemental_page_table *src UNUSED) {
 	struct page *src_page;
 	enum vm_type src_type;
-	bool writable;
+	bool src_writable;
 	struct hash_iterator src_hash;
+	void *src_va;
 	hash_first(&src_hash, &src -> spt_hash);
 	while(hash_next(&src_hash)) {
-		src_page = hash_entry(hash_cur(&src_hash), struct page, &src -> spt_hash)
+		src_page = hash_entry(hash_cur(&src_hash), struct page, hash_elem);
+		src_type = page_get_type(src_page);
+		src_writable = src_page -> writable;
+		src_va = src_page -> va;
+		if (!vm_alloc_page_with_initializer(src_type, src_va, src_writable, , ))
+			return false;
 	}
 
 
