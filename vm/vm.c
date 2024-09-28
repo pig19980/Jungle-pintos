@@ -5,6 +5,8 @@
 #include "vm/inspect.h"
 #include "kernel/hash.h"
 #include "threads/mmu.h"
+#include "userprog/process.h"
+#include <string.h>
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. 
@@ -261,23 +263,37 @@ void supplemental_page_table_init(struct supplemental_page_table *spt UNUSED) {
 (예 - fork()) src의 supplemental page table을 반복하면서
 dst의 supplemental page table의 엔트리의 정확한 복사본을
 만드세요. 당신은 초기화되지 않은(uninit)페이지를 할당하고
-그것들을 바로 요청할 필요가 있을 것이다.)*/
+그것들을 바로 요청할 필요가 있을 것이다.)
+자식이 dst 부모가 src*/
 bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 								  struct supplemental_page_table *src UNUSED) {
-	struct page *src_page;
+	struct page *src_page = NULL;
 	enum vm_type src_type;
 	bool src_writable;
 	struct hash_iterator src_hash;
-	void *src_va;
+	void *src_va = NULL;
+	struct page *child_page = NULL;
+	struct lazy_aux *aux = NULL;
 	hash_first(&src_hash, &src -> spt_hash);
 	while(hash_next(&src_hash)) {
 		src_page = hash_entry(hash_cur(&src_hash), struct page, hash_elem);
 		src_type = page_get_type(src_page);
 		src_writable = src_page -> writable;
 		src_va = src_page -> va;
-		if (!vm_alloc_page_with_initializer(src_type, src_va, src_writable, , ))
-			return false;
+		switch (src_type) {
+			case VM_UNINIT:
+				aux = (struct lazy_aux *)malloc(sizeof(struct lazy_aux));
+				memcpy(aux, src_page -> uninit.aux, sizeof(struct lazy_aux));
+				if (!vm_alloc_page_with_initializer(VM_ANON, src_va, src_writable, src_page -> uninit.init, aux))
+					return false;
+			case VM_ANON:
+				if (!vm_alloc_page(VM_ANON, src_va, src_writable)) return false;
+				if (!vm_claim_page(src_page -> va)) return false;
+				child_page = spt_find_page(dst, src_page -> va);
+				memcpy(child_page -> frame -> kva, src_page -> frame -> kva, PGSIZE);
+		}
 	}
+	return true;
 
 
 								  }

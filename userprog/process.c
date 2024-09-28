@@ -37,13 +37,6 @@ static struct process_fork_arg {
 	int fork_result;
 };
 
-static struct lazy_aux {
-	uint32_t read_bytes;
-	uint32_t zero_bytes;
-	struct file *file;
-	off_t ofs;
-};
-
 /* Similar macro to is_thread and running_thread */
 #define is_process(p) ((p) != NULL && (p)->magic == PROCESS_MAGIC)
 #define running_process() ((struct process *)(pg_round_down(rrsp())))

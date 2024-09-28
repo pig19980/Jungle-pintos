@@ -27,6 +27,13 @@ struct process {
 	unsigned magic;			  /* Detects stack overflow. */
 };
 
+struct lazy_aux {
+	uint32_t read_bytes;
+	uint32_t zero_bytes;
+	struct file *file;
+	off_t ofs;
+};
+
 tid_t process_create_initd(const char *file_name);
 void process_init_in_thread_init(struct process *new);
 void process_init_of_initial_thread(void);
