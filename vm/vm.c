@@ -286,11 +286,13 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 				memcpy(aux, src_page -> uninit.aux, sizeof(struct lazy_aux));
 				if (!vm_alloc_page_with_initializer(VM_ANON, src_va, src_writable, src_page -> uninit.init, aux))
 					return false;
+				break;
 			case VM_ANON:
 				if (!vm_alloc_page(VM_ANON, src_va, src_writable)) return false;
 				if (!vm_claim_page(src_page -> va)) return false;
 				child_page = spt_find_page(dst, src_page -> va);
 				memcpy(child_page -> frame -> kva, src_page -> frame -> kva, PGSIZE);
+				break;
 		}
 	}
 	return true;
@@ -310,10 +312,11 @@ void supplemental_page_table_kill(struct supplemental_page_table *spt UNUSED) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
 	struct hash_iterator kill_hash;
-	struct page *p = NULL;
+	
 	hash_first(&kill_hash, &spt -> spt_hash);
 	while (hash_next(&kill_hash)) {
-		p = hash_entry(hash_cur(&kill_hash), struct page, hash_elem);
-		free(p);
+		const struct page *p = hash_entry(hash_cur(&kill_hash), struct page, hash_elem);
+		destroy(p);
 	}
+	hash_clear(&spt -> spt_hash, NULL);
 }
