@@ -8,6 +8,7 @@
 #include "userprog/process.h"
 #include <string.h>
 
+
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. 
  (각 하위 시스템을 호출하여 가상 메모리 하위 시스템을 초기화한다.
@@ -277,10 +278,15 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 	hash_first(&src_hash, &src -> spt_hash);
 	while(hash_next(&src_hash)) {
 		src_page = hash_entry(hash_cur(&src_hash), struct page, hash_elem);
+		// src_type = src_page -> operations -> type; 
+		// src_type = page_get_type(src_page);
+		// if (src_type == VM_ANON && src_page -> frame == NULL) {
+		// 	if(!vm_claim_page(src_page -> va)) return false;
+		// }
 		src_type = page_get_type(src_page);
 		src_writable = src_page -> writable;
 		src_va = src_page -> va;
-		switch (src_type) {
+		switch (page_get_type(src_page)) {
 			case VM_UNINIT:
 				aux = (struct lazy_aux *)malloc(sizeof(struct lazy_aux));
 				memcpy(aux, src_page -> uninit.aux, sizeof(struct lazy_aux));
@@ -289,17 +295,22 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 				break;
 			case VM_ANON:
 				if (!vm_alloc_page(VM_ANON, src_va, src_writable)) return false;
-				if (!vm_claim_page(src_page -> va)) return false;
+				// child_page = spt_find_page(dst, src_page -> va);
+				if (!vm_claim_page(src_va)) return false;
+				if (src_page -> frame == NULL)
+					return false;
 				child_page = spt_find_page(dst, src_page -> va);
 				memcpy(child_page -> frame -> kva, src_page -> frame -> kva, PGSIZE);
 				break;
 		}
 	}
 	return true;
+	
+		}
+	
 
 
-
-								  }
+								  
 
 /* Free the resource hold by the supplemental page table
 (supplemental page table에 의해 유지되던 모든 자원들을
