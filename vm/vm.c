@@ -170,7 +170,7 @@ static bool vm_handle_wp(struct page *page UNUSED) {}
 
 /* Return true on success 
 (유효한 페이지 폴트인지를 우선 검사한다.)*/
-bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr  UNUSED,
+bool vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr  UNUSED,
 						 bool user UNUSED, bool write UNUSED,
 						 bool not_present UNUSED) {
 	struct supplemental_page_table *spt UNUSED = &thread_current()->spt;
@@ -294,7 +294,7 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 		}
 	}
 	return true;
-	
+
 
 
 								  }
@@ -309,4 +309,11 @@ free 한다. 이 함수는 process가 exit할 때 (userprog/process.c의 process
 void supplemental_page_table_kill(struct supplemental_page_table *spt UNUSED) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
+	struct hash_iterator kill_hash;
+	struct page *p = NULL;
+	hash_first(&kill_hash, &spt -> spt_hash);
+	while (hash_next(&kill_hash)) {
+		p = hash_entry(hash_cur(&kill_hash), struct page, hash_elem);
+		free(p);
+	}
 }
