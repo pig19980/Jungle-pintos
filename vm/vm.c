@@ -283,10 +283,11 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 		// if (src_type == VM_ANON && src_page -> frame == NULL) {
 		// 	if(!vm_claim_page(src_page -> va)) return false;
 		// }
-		src_type = page_get_type(src_page);
+		// src_type = page_get_type(src_page);
+		src_type = src_page->operations -> type;
 		src_writable = src_page -> writable;
 		src_va = src_page -> va;
-		switch (page_get_type(src_page)) {
+		switch (src_type) {
 			case VM_UNINIT:
 				aux = (struct lazy_aux *)malloc(sizeof(struct lazy_aux));
 				memcpy(aux, src_page -> uninit.aux, sizeof(struct lazy_aux));
