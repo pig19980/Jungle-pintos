@@ -168,16 +168,24 @@ static struct frame *vm_get_frame(void) {
 /* Growing the stack. */
 static void vm_stack_growth(void *addr) {
 	addr = pg_round_down(addr);
-	struct supplemental_page_table *spt = &thread_current() -> spt;
-	struct thread *t = thread_current();
-	struct page *p = NULL; 
-	if (!vm_alloc_page(VM_ANON, addr, true))
-		return false;
+	// struct supplemental_page_table *spt = &thread_current() -> spt;
+	// struct thread *t = thread_current();
+	// struct page *p = NULL; 
+	// if (!vm_alloc_page(VM_ANON, addr, true))
+	// 	return false;
 	// p = spt_find_page(spt, addr);
 	// if (!p)
 	// 	return false;
-	if (!vm_claim_page(addr))
-		return false;
+	// if (!vm_claim_page(addr))
+	// 	return false;
+	// t -> stack_va = addr + PGSIZE;
+	struct supplemental_page_table *spt = &thread_current() -> spt;
+	while (!spt_find_page(spt, addr)) {
+		if (!vm_alloc_page(VM_ANON, addr, true))
+			return false;
+		addr += PGSIZE;
+	}
+		
 
 }
 
