@@ -87,8 +87,8 @@ err:
 /* Find VA from spt and return page. On error, return NULL. 
 (인자로 넘겨진 보조 페이지 테이블(spt) 에서로부터 가상 주소(va)와 
 대응되는 페이지 구조체를 찾아서 반환한다. 실패했을 경우 NULL을 반환한다.)*/
-struct page *spt_find_page(struct supplemental_page_table *spt UNUSED,
-						   void *va UNUSED) {
+struct page *spt_find_page(struct supplemental_page_table *spt,
+						   void *va) {
 	struct page page;
 	/* TODO: Fill this function. */
 	struct hash_elem *e;
@@ -107,8 +107,8 @@ struct page *spt_find_page(struct supplemental_page_table *spt UNUSED,
 (인자로 주어진 보조 페이지 테이블에 페이지 구조체를 삽입한다.
 이 함수에서 주어진 보충 테이블에서 가상 주소가 존재하지 않는지
 검사해야 한다.) */
-bool spt_insert_page(struct supplemental_page_table *spt UNUSED,
-					 struct page *page UNUSED) {
+bool spt_insert_page(struct supplemental_page_table *spt,
+					 struct page *page) {
 	struct hash_elem * old_elem = hash_find(&spt -> spt_hash, &page -> hash_elem);
 	/* TODO: Fill this function. */
 	if (old_elem != NULL)
@@ -116,6 +116,7 @@ bool spt_insert_page(struct supplemental_page_table *spt UNUSED,
 	
 	hash_insert(&spt -> spt_hash, &page -> hash_elem);
 	return true;
+	// return (hash_insert(&spt -> spt_hash, &page -> hash_elem) == NULL);
 }
 
 void spt_remove_page(struct supplemental_page_table *spt, struct page *page) {
@@ -171,10 +172,10 @@ static bool vm_handle_wp(struct page *page UNUSED) {}
 
 /* Return true on success 
 (유효한 페이지 폴트인지를 우선 검사한다.)*/
-bool vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr  UNUSED,
-						 bool user UNUSED, bool write UNUSED,
-						 bool not_present UNUSED) {
-	struct supplemental_page_table *spt UNUSED = &thread_current()->spt;
+bool vm_try_handle_fault (struct intr_frame *f, void *addr,
+						 bool user, bool write,
+						 bool not_present) {
+	struct supplemental_page_table *spt = &thread_current()->spt;
 	struct page *page = NULL;
 	/* TODO: Validate the fault */
 	/* TODO: Your code goes here */
@@ -201,13 +202,13 @@ void vm_dealloc_page(struct page *page) {
 (인자로 주어진 va에 페이지를 할당하고, 해당 페이지에 프레임을 할당한다.
  당신은 우선 한 페이지를 얻어야 하고 그 이후에 해당 페이지를 인자로 
  갖는 vm_do_claim_page라는 함수를 호출해야 한다.)*/
-bool vm_claim_page(void *va UNUSED) {
+bool vm_claim_page(void *va) {
 	struct page *page;
 	/* TODO: Fill this function */
-	if (!spt_find_page(&thread_current()->spt, pg_round_down(va)))
+	page = spt_find_page(&thread_current()->spt, pg_round_down(va));
+	if (page == NULL)
 		return false;
-
-
+	
 
 	return vm_do_claim_page(page);
 }
@@ -235,14 +236,14 @@ static bool vm_do_claim_page(struct page *page) {
 }
 
 unsigned
-page_hash (const struct hash_elem *p_, void *aux UNUSED) {
+page_hash (const struct hash_elem *p_, void *aux) {
   const struct page *p = hash_entry (p_, struct page, hash_elem);
   return hash_bytes (&p->va, sizeof p->va);
 }
 
 bool
 page_less (const struct hash_elem *a_,
-           const struct hash_elem *b_, void *aux UNUSED) {
+           const struct hash_elem *b_, void *aux) {
   const struct page *a = hash_entry (a_, struct page, hash_elem);
   const struct page *b = hash_entry (b_, struct page, hash_elem);
 
@@ -253,7 +254,7 @@ page_less (const struct hash_elem *a_,
 (보조 페이지 테이블을 초기화합니다. 보조 페이지 테이블을 어떤 자료 구조로 구현할지 선택하세요.
 userprog/process.c의 initd 함수로 새로운 프로세스가 시작하거나 process.c의 __do_fork로 자식
 프로세스가 생성될 때 위의 함수가 호출된다.)*/
-void supplemental_page_table_init(struct supplemental_page_table *spt UNUSED) {
+void supplemental_page_table_init(struct supplemental_page_table *spt) {
 	if(!hash_init(&spt -> spt_hash, page_hash, page_less, NULL))
 		PANIC("spt panic!");
 }
@@ -266,8 +267,8 @@ dst의 supplemental page table의 엔트리의 정확한 복사본을
 만드세요. 당신은 초기화되지 않은(uninit)페이지를 할당하고
 그것들을 바로 요청할 필요가 있을 것이다.)
 자식이 dst 부모가 src*/
-bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
-								  struct supplemental_page_table *src UNUSED) {
+bool supplemental_page_table_copy(struct supplemental_page_table *dst,
+								  struct supplemental_page_table *src) {
 	struct page *src_page = NULL;
 	enum vm_type src_type;
 	bool src_writable;
@@ -278,11 +279,6 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 	hash_first(&src_hash, &src -> spt_hash);
 	while(hash_next(&src_hash)) {
 		src_page = hash_entry(hash_cur(&src_hash), struct page, hash_elem);
-		// src_type = src_page -> operations -> type; 
-		// src_type = page_get_type(src_page);
-		// if (src_type == VM_ANON && src_page -> frame == NULL) {
-		// 	if(!vm_claim_page(src_page -> va)) return false;
-		// }
 		// src_type = page_get_type(src_page);
 		src_type = src_page->operations -> type;
 		src_writable = src_page -> writable;
@@ -302,6 +298,9 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 					return false;
 				child_page = spt_find_page(dst, src_page -> va);
 				memcpy(child_page -> frame -> kva, src_page -> frame -> kva, PGSIZE);
+				break;
+			default:
+				PANIC("todo : vm_file type");
 				break;
 		}
 	}
@@ -325,10 +324,14 @@ void supplemental_page_table_kill(struct supplemental_page_table *spt UNUSED) {
 	 * TODO: writeback all the modified contents to the storage. */
 	struct hash_iterator kill_hash;
 	
-	hash_first(&kill_hash, &spt -> spt_hash);
-	while (hash_next(&kill_hash)) {
-		const struct page *p = hash_entry(hash_cur(&kill_hash), struct page, hash_elem);
-		destroy(p);
-	}
-	hash_clear(&spt -> spt_hash, NULL);
+	// hash_first(&kill_hash, &spt -> spt_hash);
+	// while (hash_next(&kill_hash)) {
+	// 	const struct page *p = hash_entry(hash_cur(&kill_hash), struct page, hash_elem);
+	// 	destroy(p);
+	// }
+	hash_clear(&spt -> spt_hash, NULL);	//page_kill()을 사용해서 만들기
 }
+
+// void page_kill() {
+
+// }
