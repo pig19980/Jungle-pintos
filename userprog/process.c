@@ -860,6 +860,9 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		만약 kpage가 NULL이 된다면 lazy_load_segment를 실행 그러므로 아래 실행 ?*/
 		// void *aux = NULL;
 		struct lazy_aux *aux = (struct lazy_aux*)malloc(sizeof(struct lazy_aux));
+		if (!aux) {
+			return false;
+		}
 		aux -> read_bytes = page_read_bytes;
 		aux -> zero_bytes = page_zero_bytes;
 		aux -> file = file;
@@ -873,7 +876,7 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		read_bytes -= page_read_bytes;
 		zero_bytes -= page_zero_bytes;
 		upage += PGSIZE;
-		ofs += PGSIZE;
+		ofs += page_read_bytes;
 	}
 	return true;
 }
