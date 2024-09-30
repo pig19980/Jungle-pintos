@@ -29,10 +29,10 @@ void vm_init(void) {
  * type of the page after it will be initialized.
  * This function is fully implemented now. */
 enum vm_type page_get_type(struct page *page) {
-	int ty = VM_TYPE(page->operations->type);
+	int ty = VM_TYPE(page->operations->type); // UNINIT
 	switch (ty) {
 	case VM_UNINIT:
-		return VM_TYPE(page->uninit.type);
+		return VM_TYPE(page->uninit.type);	//ANON
 	default:
 		return ty;
 	}
@@ -55,6 +55,7 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage,
 	
 	bool success = false;
 	ASSERT(VM_TYPE(type) != VM_UNINIT)
+	upage = pg_round_down(upage);
 
 	struct supplemental_page_table *spt = &thread_current()->spt;
 
@@ -69,15 +70,16 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage,
          * TODO: uninit_new 호출 후 필드를 수정해야 합니다.)  */
 		struct page *p = (struct page*)malloc(sizeof(struct page));
 		if (type == VM_ANON) 
-			uninit_new(p, pg_round_down(upage), init, type, aux, anon_initializer);
+			uninit_new(p, p -> va, init, type, aux, anon_initializer);
 		else if (type == VM_FILE)
-			uninit_new(p, pg_round_down(upage), init, type, aux, file_backed_initializer);
+			uninit_new(p, p -> va, init, type, aux, file_backed_initializer);
 		
 		p -> writable = writable;
 		p -> pml4 = thread_current() -> pml4;
+		p -> va = upage;
 		/* TODO: Insert the page into the spt.
 		(페이지를 spt에 삽입하세요.) */
-		spt_insert_page(spt, p);
+		if (!spt_insert_page(spt, p)) return false;
 	}
 	return success = true;
 err:
@@ -164,7 +166,21 @@ static struct frame *vm_get_frame(void) {
 }
 
 /* Growing the stack. */
-static void vm_stack_growth(void *addr UNUSED) {}
+static void vm_stack_growth(void *addr) {
+	addr = pg_round_down(addr);
+	struct supplemental_page_table *spt = &thread_current() -> spt;
+	struct thread *t = thread_current();
+	struct page *p = NULL; 
+	if (!vm_alloc_page(VM_ANON, addr, true))
+		return false;
+	// p = spt_find_page(spt, addr);
+	// if (!p)
+	// 	return false;
+	if (!vm_claim_page(addr))
+		return false;
+
+}
+
 
 /* Handle the fault on write_protected page */
 //copy on write 는 여기서 짜야함 .
@@ -182,10 +198,15 @@ bool vm_try_handle_fault (struct intr_frame *f, void *addr,
 	if (user && is_kernel_vaddr(addr))
 		return false;
 	page = spt_find_page(spt, addr); 
-	if (page == NULL)
+	if (page == NULL) {
+		if (f -> rsp - 8 <= addr && addr < USER_STACK){
+			vm_stack_growth(addr);
+			return true;
+		}
 		return false;
+	}
 	 //wrtiable 안하는데 write하는경우
-	if (!page -> writable && write) {
+	if (page != NULL && !page -> writable && write) {
 		return false;
 	}
 	return vm_do_claim_page(page);
@@ -228,8 +249,11 @@ static bool vm_do_claim_page(struct page *page) {
 
 	/* TODO: Insert page table entry to map page's VA to frame's PA. 
 	(페이지 테이블 항목을 삽입하여 페이지의 VA를 프레임의 PA에 매핑합니다.)*/
+	if (pml4_get_page(page -> pml4, page -> va)) {
+		PANIC("asdf");
+	}
 
-	if (!pml4_set_page(thread_current() -> pml4, page -> va, frame -> kva, page -> writable))
+	if (!pml4_set_page(page -> pml4, page -> va, frame -> kva, page -> writable))
 		return false;
 
 	return swap_in(page, frame->kva);
@@ -279,7 +303,7 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst,
 	hash_first(&src_hash, &src -> spt_hash);
 	while(hash_next(&src_hash)) {
 		src_page = hash_entry(hash_cur(&src_hash), struct page, hash_elem);
-		// src_type = page_get_type(src_page);
+		// src_type = page_get_type(src_page); 나중에 VM_FILE관련 예외를 처리할때 사용.
 		src_type = src_page->operations -> type;
 		src_writable = src_page -> writable;
 		src_va = src_page -> va;
@@ -322,7 +346,6 @@ free 한다. 이 함수는 process가 exit할 때 (userprog/process.c의 process
 void supplemental_page_table_kill(struct supplemental_page_table *spt UNUSED) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
-	struct hash_iterator kill_hash;
 	
 	// hash_first(&kill_hash, &spt -> spt_hash);
 	// while (hash_next(&kill_hash)) {
@@ -333,5 +356,5 @@ void supplemental_page_table_kill(struct supplemental_page_table *spt UNUSED) {
 }
 
 // void page_kill() {
-
+	// vm_dealloc_page()
 // }

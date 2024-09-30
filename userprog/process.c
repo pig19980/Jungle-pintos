@@ -887,7 +887,6 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
 한 스택페이지만 만들어주면된다.)*/
 static bool setup_stack(struct intr_frame *if_) {
 	void *stack_bottom = (void *)(((uint8_t *)USER_STACK) - PGSIZE);
-	uint8_t *kpage;
 
 	if(!vm_alloc_page(VM_ANON, stack_bottom, true)) 
 		return false;

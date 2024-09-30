@@ -15,6 +15,8 @@
 
 #include "vm/vm.h"
 #include "vm/uninit.h"
+#include <string.h>
+#include "threads/vaddr.h"
 
 static bool uninit_initialize(struct page *page, void *kva);
 static void uninit_destroy(struct page *page);
@@ -53,8 +55,15 @@ static bool uninit_initialize(struct page *page, void *kva) {
 	void *aux = uninit->aux;
 
 	/* TODO: You may need to fix this function. */
-	return uninit->page_initializer(page, uninit->type, kva) &&
-		   (init ? init(page, aux) : true);
+	if (!uninit->page_initializer(page, uninit->type, kva)) {
+		return false;
+	}
+	if (init) {
+		return init(page, aux);
+	} else {
+		memset(kva, 0, PGSIZE);
+		return true;
+	}
 }
 
 /* Free the resources hold by uninit_page. Although most of pages are transmuted
