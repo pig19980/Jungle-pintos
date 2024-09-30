@@ -45,7 +45,13 @@ bool hash_init(struct hash *h, hash_hash_func *hash, hash_less_func *less,
    table H while hash_clear() is running, using any of the
    functions hash_clear(), hash_destroy(), hash_insert(),
    hash_replace(), or hash_delete(), yields undefined behavior,
-   whether done in DESTRUCTOR or elsewhere. */
+   whether done in DESTRUCTOR or elsewhere. 
+   (hash_init()으로 초기화된 hash의 모든 원소들을 제거합니다.
+action이 null이 아니라면, 이 action은 해시 테이블의 각 원소에 의해 한번씩 호출될 것이고,
+호출자(caller)는 해당 원소에 사용된 다른 자원들이나 할당된 메모리를 해제할 수 있습니다.
+예를 들어, 해시 테이블의 원소들이 malloc()을 이용해서 동적으로 할당되었다면, action을 통해 각 요소를 free()할 수 있습니다.
+이러한 작업이 안전한 이유는, hash_clear()가 해시 원소에서 action을 호출한 뒤에는 해당 해시 원소의 메모리에 접근하지 않을 것이기 때문입니다.
+다만, action은 hash_insert()또는 hash_delete()와 같이 해시 테이블을 수정할 수 있는 함수를 호출해서는 안됩니다.)*/
 void hash_clear(struct hash *h, hash_action_func *destructor) {
 	size_t i;
 
@@ -74,7 +80,11 @@ void hash_clear(struct hash *h, hash_action_func *destructor) {
    any of the functions hash_clear(), hash_destroy(),
    hash_insert(), hash_replace(), or hash_delete(), yields
    undefined behavior, whether done in DESTRUCTOR or
-   elsewhere. */
+   elsewhere.
+   (action이 null이 아닌경우, hash_clear()호출과 동일하게, action은
+   각 해시 원소에 의해 한번씩 호출될 것입니다. 그런 다음, hash가 할당
+   받았던 메모리를 반납시킵니다. 이 함수를 수행한 뒤에 이 hash가 hash_init()
+   호출이 선행되지 않은 채로 해시 테이블 함수로 전달되어선 안된다.) */
 void hash_destroy(struct hash *h, hash_action_func *destructor) {
 	if (destructor != NULL)
 		hash_clear(h, destructor);
@@ -84,7 +94,10 @@ void hash_destroy(struct hash *h, hash_action_func *destructor) {
 /* Inserts NEW into hash table H and returns a null pointer, if
    no equal element is already in the table.
    If an equal element is already in the table, returns it
-   without inserting NEW. */
+   without inserting NEW. 
+   (NEW를 해시 테이블 H에 삽입하고, 동일한 요소가 테이블에 없으면
+   null 포인터를 반환한다. 만약 동일한 요소가 테이블에 이미 존재
+   한다면, NEW를 삽입하지 않고 그 요소를 반환한다.   )*/
 struct hash_elem *hash_insert(struct hash *h, struct hash_elem *new) {
 	struct list *bucket = find_bucket(h, new);
 	struct hash_elem *old = find_elem(h, bucket, new);
@@ -113,7 +126,9 @@ struct hash_elem *hash_replace(struct hash *h, struct hash_elem *new) {
 }
 
 /* Finds and returns an element equal to E in hash table H, or a
-   null pointer if no equal element exists in the table. */
+   null pointer if no equal element exists in the table. 
+   (hash에서 element와 같은 원소를 찾습니다. 찾았다면 그 원소를 반환,
+   그렇지 않다면 null을 반환.)*/
 struct hash_elem *hash_find(struct hash *h, struct hash_elem *e) {
 	return find_elem(h, find_bucket(h, e), e);
 }
@@ -124,7 +139,13 @@ struct hash_elem *hash_find(struct hash *h, struct hash_elem *e) {
 
    If the elements of the hash table are dynamically allocated,
    or own resources that are, then it is the caller's
-   responsibility to deallocate them. */
+   responsibility to deallocate them. 
+   (hash에서 element와 같은 원소를 찾습니다. 찾았다면 hash에서 삭제한 뒤에
+   그 원소를 반환하고, 그렇지 않다면 null을 반환하며 hash는 수정되지 않습니다.
+   때에 따라, 호출자는 반환되는 원소와 관련된 모든 자원의 할당을 해제해야할
+   책임이 있습니다. 예를 들어, 해시 테이블의 원소들이 malloc()을 이용해서
+   동적으로 할당되었다면, 호출자는 더 이상 필요하지 않은 원소를 반드시 free()
+   해줘야한다.)*/
 struct hash_elem *hash_delete(struct hash *h, struct hash_elem *e) {
 	struct hash_elem *found = find_elem(h, find_bucket(h, e), e);
 	if (found != NULL) {
@@ -172,7 +193,8 @@ void hash_apply(struct hash *h, hash_action_func *action) {
    Modifying hash table H during iteration, using any of the
    functions hash_clear(), hash_destroy(), hash_insert(),
    hash_replace(), or hash_delete(), invalidates all
-   iterators. */
+   iterators. 
+   (iterators를 해시 테이블의 첫번째 요소 직전으로 초기화한다.)*/
 void hash_first(struct hash_iterator *i, struct hash *h) {
 	ASSERT(i != NULL);
 	ASSERT(h != NULL);
@@ -189,7 +211,10 @@ void hash_first(struct hash_iterator *i, struct hash *h) {
    Modifying a hash table H during iteration, using any of the
    functions hash_clear(), hash_destroy(), hash_insert(),
    hash_replace(), or hash_delete(), invalidates all
-   iterators. */
+   iterators. 
+   (hash_next()에 의해 리턴된 값 중 가장 최근 값을 리턴한다. hash_first()
+   로 iterator를 초기화 하고 나서 최초의 hash_next()를 호출하기 전에 
+   hash_cur()를 호출하는 것은 정의되지 않은 행동입니다.)*/
 struct hash_elem *hash_next(struct hash_iterator *i) {
 	ASSERT(i != NULL);
 
@@ -212,17 +237,20 @@ struct hash_elem *hash_cur(struct hash_iterator *i) {
 	return i->elem;
 }
 
-/* Returns the number of elements in H. */
+/* Returns the number of elements in H. 
+(현재 hash에 저장된 원소의 수 반환)*/
 size_t hash_size(struct hash *h) { return h->elem_cnt; }
 
-/* Returns true if H contains no elements, false otherwise. */
+/* Returns true if H contains no elements, false otherwise. 
+(현재 hash에 원소가 없다면 true를, 하나라도 가지고 있다면 false를 반환한다.)*/
 bool hash_empty(struct hash *h) { return h->elem_cnt == 0; }
 
 /* Fowler-Noll-Vo hash constants, for 32-bit word sizes. */
 #define FNV_64_PRIME 0x00000100000001B3UL
 #define FNV_64_BASIS 0xcbf29ce484222325UL
 
-/* Returns a hash of the SIZE bytes in BUF. */
+/* Returns a hash of the SIZE bytes in BUF. 
+요소의 데이터를 64bit unsigned int로 해싱한 값을 리턴.*/
 uint64_t hash_bytes(const void *buf_, size_t size) {
 	/* Fowler-Noll-Vo 32-bit hash, for bytes. */
 	const unsigned char *buf = buf_;
@@ -237,7 +265,8 @@ uint64_t hash_bytes(const void *buf_, size_t size) {
 	return hash;
 }
 
-/* Returns a hash of string S. */
+/* Returns a hash of string S.
+null-terminated string을 해싱한 값을 리턴함. */
 uint64_t hash_string(const char *s_) {
 	const unsigned char *s = (const unsigned char *)s_;
 	uint64_t hash;
@@ -251,7 +280,8 @@ uint64_t hash_string(const char *s_) {
 	return hash;
 }
 
-/* Returns a hash of integer I. */
+/* Returns a hash of integer I.
+(i를 해싱한 값을 반환.) */
 uint64_t hash_int(int i) { return hash_bytes(&i, sizeof i); }
 
 /* Returns the bucket in H that E belongs in. */
@@ -290,7 +320,10 @@ static inline size_t is_power_of_2(size_t x) {
 /* Changes the number of buckets in hash table H to match the
    ideal.  This function can fail because of an out-of-memory
    condition, but that'll just make hash accesses less efficient;
-   we can still continue. */
+   we can still continue. 
+   (해시 테이블 H의 버킷 수를 이상적인 수로 변경합니다.
+	이 함수는 메모리 부족으로 인해 실패할 수 있지만, 그럴 경우 
+	해시 접근이 덜 효율적이게 될 뿐이고 계속 진행할 수는 있습니다.)*/
 static void rehash(struct hash *h) {
 	size_t old_bucket_cnt, new_bucket_cnt;
 	struct list *new_buckets, *old_buckets;

@@ -167,7 +167,10 @@ void inode_remove(struct inode *inode) {
 
 /* Reads SIZE bytes from INODE into BUFFER, starting at position OFFSET.
  * Returns the number of bytes actually read, which may be less
- * than SIZE if an error occurs or end of file is reached. */
+ * than SIZE if an error occurs or end of file is reached.
+ * (INODE에서 OFFSET 위치부터 BUFFER로 SIZE 바이트를 읽는다.
+ * 실제로 읽은 바이트 수를 반환하며, 오류가 발생하거나 파일의 끝에 도달한 경우
+ * SIZE보다 적을 수 있다.) */
 off_t inode_read_at(struct inode *inode, void *buffer_, off_t size,
 					off_t offset) {
 	uint8_t *buffer = buffer_;
@@ -218,7 +221,11 @@ off_t inode_read_at(struct inode *inode, void *buffer_, off_t size,
  * Returns the number of bytes actually written, which may be
  * less than SIZE if end of file is reached or an error occurs.
  * (Normally a write at end of file would extend the inode, but
- * growth is not yet implemented.) */
+ * growth is not yet implemented.)
+ * (BUFFER에서 INODE로 OFFSET 위치부터 SIZE 바이트를 쓴다.
+ * 실제로 기록된 바이트 수를 반환하며, 파일으 끝에 도달하거나 오류가
+ * 발생한 경우 SIZE보다 적을 수 있다.
+ * (일반적으로 파일의 끝에서 쓰기를 하면 inode가 확장되지만 아직 구현 X )) */
 off_t inode_write_at(struct inode *inode, const void *buffer_, off_t size,
 					 off_t offset) {
 	const uint8_t *buffer = buffer_;

@@ -6,6 +6,11 @@
  * object (anon, file, page_cache), by initializing the page object,and calls
  * initialization callback that passed from vm_alloc_page_with_initializer
  * function.
+ * (모든 페이지는 처음에 uninit 페이지로 생성된다. 첫 번째 페이지 폴트가 발생하면,
+ * 핸들러 체인은 uninit_initialize(page -> operations.swap_in)을 호출한다.
+ * uninit_initialize 함수는 페이지 객체(anon, file, page_cache)를 초기화하여
+ * 해당 페이지를 특정 페이지 객체로 변환하고, vm_alloc_page_with_initializer) 
+ * 함수에서 전달된 초기화 콜백을 호출한다.
  * */
 
 #include "vm/vm.h"

@@ -18,7 +18,19 @@
  * conversion from a struct hash_elem back to a structure object
  * that contains it.  This is the same technique used in the
  * linked list implementation.  Refer to lib/kernel/list.h for a
- * detailed explanation. */
+ * detailed explanation. 
+ * (해시 테이블.
+이 자료 구조는 Pintos 프로젝트 3의 Tour of Pintos에서 자세히 설명되어 있습니다.
+
+이것은 체이닝을 사용하는 표준 해시 테이블입니다. 테이블에서 요소를 찾기 위해 요소의 
+데이터를 기반으로 해시 함수를 계산하고, 이를 이중 연결 리스트 배열의 인덱스로 사용한 
+후 리스트에서 선형 검색을 수행합니다.
+
+체인 리스트는 동적 할당을 사용하지 않습니다. 대신, 해시에 포함될 수 있는 각 구조체는
+ struct hash_elem 멤버를 포함해야 합니다. 모든 해시 함수는 이 struct hash_elem을 
+ 기반으로 작동합니다. hash_entry 매크로는 struct hash_elem에서 해당 구조체 객체로 
+ 다시 변환할 수 있게 해줍니다. 이 기법은 연결 리스트 구현에서도 동일하게 사용됩니다. 
+ 자세한 설명은 lib/kernel/list.h를 참조하세요.)*/
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -34,7 +46,10 @@ struct hash_elem {
  * the structure that HASH_ELEM is embedded inside.  Supply the
  * name of the outer structure STRUCT and the member name MEMBER
  * of the hash element.  See the big comment at the top of the
- * file for an example. */
+ * file for an example. 
+ * (포인터 hash element인 HASH_ELEM을 HASH_ELEM이 포함된 구조체에 대한 
+ * 포인터로 변환합니다. 외부 구조체의 이름 STRUCT와 해시 요소의 멤버 이름 MEMBER를 
+ * 제공해야 합니다. 예시는 파일 상단의 큰 주석을 참고하세요. )*/
 #define hash_entry(HASH_ELEM, STRUCT, MEMBER)        \
 	((STRUCT *)((uint8_t *)&(HASH_ELEM)->list_elem - \
 				offsetof(STRUCT, MEMBER.list_elem)))
@@ -50,17 +65,18 @@ typedef bool hash_less_func(const struct hash_elem *a,
 							const struct hash_elem *b, void *aux);
 
 /* Performs some operation on hash element E, given auxiliary
- * data AUX. */
+ * data AUX. 
+ (요소에 대해 caller가 선택한 어떤 작업을 수행한다.)*/
 typedef void hash_action_func(struct hash_elem *e, void *aux);
 
 /* Hash table. */
 struct hash {
-	size_t elem_cnt;	  /* Number of elements in table. */
-	size_t bucket_cnt;	/* Number of buckets, a power of 2. */
-	struct list *buckets; /* Array of `bucket_cnt' lists. */
-	hash_hash_func *hash; /* Hash function. */
-	hash_less_func *less; /* Comparison function. */
-	void *aux;			  /* Auxiliary data for `hash' and `less'. */
+	size_t elem_cnt;	  /* Number of elements in table. (테이블의 요소 수)*/
+	size_t bucket_cnt;	/* Number of buckets, a power of 2. (버킷(배열) 수, 2의 거듭제곱)*/
+	struct list *buckets; /* Array of `bucket_cnt' lists. (bucket_cnt 목록배열)*/
+	hash_hash_func *hash; /* Hash function. (hash 함수)*/
+	hash_less_func *less; /* Comparison function. (비교 함수)*/
+	void *aux;			  /* Auxiliary data for `hash' and `less'. (hash 및 less에 대한 보조 데이터)*/
 };
 
 /* A hash table iterator. */

@@ -39,9 +39,13 @@ void *memmove(void *dst_, const void *src_, size_t size) {
 }
 
 /* Find the first differing byte in the two blocks of SIZE bytes
-   at A and B.  Returns a positive value if the byte in A is
+   at A and B. 
+   A와 B에서 SIZE bytes의 두 블록에서 처음으로 다른 바이트를 구한다.
+	Returns a positive value if the byte in A is
    greater, a negative value if the byte in B is greater, or zero
-   if blocks A and B are equal. */
+   if blocks A and B are equal. 
+   A의 바이트가 크다면 양수를 반환, B의 바이트가 크다면 음수를 반환
+   , 둘의 바이트가 같다면 0을 반환.*/
 int memcmp(const void *a_, const void *b_, size_t size) {
 	const unsigned char *a = a_;
 	const unsigned char *b = b_;

@@ -328,7 +328,8 @@ void intr_handler(struct intr_frame *frame) {
 		yield_on_return = false;
 	}
 
-	/* Invoke the interrupt's handler. */
+	/* Invoke the interrupt's handler. 
+	(인터럽트 핸들러를 호출.)*/
 	handler = intr_handlers[frame->vec_no];
 	if (handler != NULL)
 		handler(frame);

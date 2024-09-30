@@ -10,11 +10,13 @@ static void file_backed_destroy(struct page *page);
 static const struct page_operations file_ops = {
 	.swap_in = file_backed_swap_in,
 	.swap_out = file_backed_swap_out,
-	.destroy = file_backed_destroy,
+	.destroy = file_backed_destroy,	// 페이지를 삭제하는 함수이다.
 	.type = VM_FILE,
 };
 
-/* The initializer of file vm */
+/* The initializer of file vm 
+(파일 지원 페이지 하위시스템을 초기화한다. 이 기능에서는
+파일 백업 페이지와 관련된 모든 것을 설정할 수 있다.)*/
 void vm_file_init(void) {}
 
 /* Initialize the file backed page */
