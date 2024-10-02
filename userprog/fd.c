@@ -1,6 +1,7 @@
 #include "userprog/fd.h"
 #include <stddef.h>
 #include "filesys/filesys.h"
+#include "vm/vm.h"
 
 static bool check_fd(int fd) {
 	if (0 <= fd && fd < FDSIZE)
@@ -176,4 +177,23 @@ bool fd_dup_fd_list(fd_list dst_list, fd_list src_list) {
 		}
 	}
 	return true;
+}
+
+void fd_mmap(void *addr, size_t length, int writable, int fd, off_t offset, fd_list fd_list) {
+	struct file *file;
+	file = fd_list[fd];
+	if (file == NULL) return false;
+
+	ASSERT(!is_kernel_vaddr(addr));
+
+	if (length <= 0) return false;
+
+	void *file_addr = (void *)(((uint8_t )addr) % PGSIZE);
+
+	if (file_addr != 0) return false;
+
+	if (spt_find_page(&thread_current() -> spt, addr)) return false;
+
+	return do_mmap(addr, length, writable, file, offset);
+
 }

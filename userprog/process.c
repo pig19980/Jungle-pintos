@@ -808,14 +808,12 @@ static bool lazy_load_segment(struct page *page, void *aux) {
 	file_seek(lazy_file, lazy_ofs);
 
 	if (file_read(lazy_file, kva, lazy_read_bytes) != (int)lazy_read_bytes) {
-		free(aux);
+		memset(kva, aux, lazy_read_bytes);
 		return false;
 	}
 	memset(kva + lazy_read_bytes, 0, lazy_zero_bytes);
 	free(aux);
 	return true;
-
-
 }
 
 /* Loads a segment starting at offset OFS in FILE at address

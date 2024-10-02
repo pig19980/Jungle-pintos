@@ -37,7 +37,9 @@ struct file *file_open(struct inode *inode) {
 }
 
 /* Opens and returns a new file for the same inode as FILE.
- * Returns a null pointer if unsuccessful. */
+ * Returns a null pointer if unsuccessful. 
+ (FILE과 동일한 inode에 대한 새 파일을 열고 반환한다.
+ 실패하면 null 포인터를 반환한다.)*/
 struct file *file_reopen(struct file *file) {
 	return file_open(inode_reopen(file->inode));
 }
